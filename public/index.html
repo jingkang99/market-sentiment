@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SPY &amp; QQQ Market Sentiment</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script>
+      // Make runtime errors VISIBLE instead of a blank page
+      window.__showFatal = function (msg) {
+        var r = document.getElementById("root");
+        if (!r) return;
+        r.innerHTML =
+          '<div style="background:#2a1215;border:1px solid #ef4444;color:#fca5a5;padding:20px;border-radius:10px;font:13px/1.5 ui-monospace,monospace;white-space:pre-wrap">' +
+          "<b>Something broke while starting the app</b>\n\n" +
+          String(msg) +
+          "</div>";
+      };
+      window.addEventListener("error", function (e) {
+        window.__showFatal((e.message || "Error") + "\n" + (e.filename || "") + ":" + (e.lineno || "") + "\n" + ((e.error && e.error.stack) || ""));
+      });
+      window.addEventListener("unhandledrejection", function (e) {
+        window.__showFatal("Unhandled promise rejection:\n" + ((e.reason && e.reason.stack) || e.reason));
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>JavaScript is required.</noscript>
+    <script src="/app.js"></script>
+  </body>
+</html>
+
