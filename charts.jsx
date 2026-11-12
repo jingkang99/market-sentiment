@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 
-export const CHART_VERSION = "c5-hover-fix"; // bump to bust the browser cache
+export const CHART_VERSION = "c6-vol-sma21"; // bump to bust the browser cache
 console.log("[charts] build", CHART_VERSION);
 
 const C = {
@@ -15,6 +15,7 @@ const C = {
   rsi21: "#f472b6",
   macd: "#38bdf8",
   macdSignal: "#fbbf24",
+  volSma: "#f97316",
   grid: "#232a36",
   axis: "#8b94a7",
   text: "#e8ecf3",
@@ -117,7 +118,7 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
         min = Math.min(min, b.l, b.sma20 ?? b.l, b.sma50 ?? b.l, b.ema21 ?? b.l);
         max = Math.max(max, b.h, b.sma20 ?? b.h, b.sma50 ?? b.h, b.ema21 ?? b.h);
       }
-      maxVol = Math.max(maxVol, b.v || 0);
+      maxVol = Math.max(maxVol, b.v || 0, b.volSma21 || 0);
       if (b.macd != null) macdAbs = Math.max(macdAbs, Math.abs(b.macd));
       if (b.macdSignal != null) macdAbs = Math.max(macdAbs, Math.abs(b.macdSignal));
     }
@@ -236,9 +237,12 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
         const y = yVol(b.v);
         ctx.fillRect(xAt(i) - vw / 2, y, vw, vp.top + vp.h - y);
       }
+      lineOn("volSma21", C.volSma, 1.4, [], yVol);
       ctx.fillStyle = C.axis;
       ctx.textAlign = "left";
       ctx.fillText("VOL", g.plotX + 4, vp.top + 8);
+      ctx.fillStyle = C.volSma;
+      ctx.fillText("SMA21", g.plotX + 32, vp.top + 8);
     }
 
     if (variant !== "bands") {
@@ -446,7 +450,10 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
             <>
               <div>O <b>{fmt(hb.o)}</b> &nbsp; H <b>{fmt(hb.h)}</b></div>
               <div>L <b>{fmt(hb.l)}</b> &nbsp; C <b>{fmt(hb.c)}</b></div>
-              <div>Vol {((hb.v || 0) / 1e6).toFixed(2)}M</div>
+              <div>
+                Vol {((hb.v || 0) / 1e6).toFixed(2)}M{" "}
+                <span style={{ color: C.volSma }}>SMA21 {hb.volSma21 != null ? ((hb.volSma21) / 1e6).toFixed(2) + "M" : "—"}</span>
+              </div>
               <div>
                 <span style={{ color: C.sma20 }}>SMA20 {fmt(hb.sma20)}</span>{" "}
                 <span style={{ color: C.sma50 }}>SMA50 {fmt(hb.sma50)}</span>

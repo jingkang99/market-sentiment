@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { analyze } from "./indicators.js";
 import { PriceChart, COLORS as C } from "./charts.jsx";
+import { getSignal, combineSignals, contextFrom } from "./signals.js";
 
 /* ---------- expandable chart card ---------- */
 
@@ -149,33 +150,6 @@ async function fetchYahooChart(symbol) {
   }
 }
 
-/* ---------- signal logic ---------- */
-
-function getSignal(price, sma20, sma50, rsi, macd) {
-  let score = 0;
-  const reasons = [];
-  if (sma20 != null && sma50 != null) {
-    if (price > sma20 && sma20 > sma50) { score += 2; reasons.push("Price above SMA20 and SMA20 above SMA50 (strong uptrend)"); }
-    else if (price > sma20) { score += 1; reasons.push("Price above SMA20 (short-term bullish)"); }
-    else if (price < sma20 && sma20 < sma50) { score -= 2; reasons.push("Price below SMA20 and SMA20 below SMA50 (strong downtrend)"); }
-    else if (price < sma20) { score -= 1; reasons.push("Price below SMA20 (short-term bearish)"); }
-  }
-  if (rsi != null) {
-    if (rsi > 55 && rsi < 70) { score += 1; reasons.push("RSI " + rsi.toFixed(1) + " - healthy bullish momentum"); }
-    else if (rsi >= 70) { score -= 0.5; reasons.push("RSI " + rsi.toFixed(1) + " - overbought (caution)"); }
-    else if (rsi < 45 && rsi > 30) { score -= 1; reasons.push("RSI " + rsi.toFixed(1) + " - bearish momentum"); }
-    else if (rsi <= 30) { score += 0.5; reasons.push("RSI " + rsi.toFixed(1) + " - oversold (potential bounce)"); }
-  }
-  if (macd != null) {
-    if (macd > 0) { score += 1; reasons.push("MACD positive (bullish momentum)"); }
-    else { score -= 1; reasons.push("MACD negative (bearish momentum)"); }
-  }
-  let label = "NEUTRAL";
-  if (score >= 2) label = "BULLISH";
-  else if (score <= -1.5) label = "BEARISH";
-  return { score: score, label: label, reasons: reasons };
-}
-
 /* ---------- cards ---------- */
 
 function Indicator(props) {
@@ -194,7 +168,7 @@ function StockCard(props) {
   const data = props.data;
   if (!data) return null;
   const a = useMemo(() => analyze(data.bars || []), [data]);
-  const sig = getSignal(data.price, a.sma20, a.sma50, a.rsi, a.macd);
+  const sig = useMemo(() => getSignal(contextFrom(data, a)), [data, a]);
   return (
     <div className="card">
       <div className="card-header">
@@ -313,11 +287,11 @@ function App() {
   let overallLabel = "NEUTRAL";
   let overallScore = 0;
   if (spy && other && spyA && otherA) {
-    const s1 = getSignal(spy.price, spyA.sma20, spyA.sma50, spyA.rsi, spyA.macd);
-    const s2 = getSignal(other.price, otherA.sma20, otherA.sma50, otherA.rsi, otherA.macd);
-    overallScore = (s1.score + s2.score) / 2;
-    if (overallScore >= 1.5) overallLabel = "BULLISH";
-    else if (overallScore <= -1) overallLabel = "BEARISH";
+    const s1 = getSignal(contextFrom(spy, spyA));
+    const s2 = getSignal(contextFrom(other, otherA));
+    const overall = combineSignals([s1, s2]);
+    overallScore = overall.score;
+    overallLabel = overall.label;
   }
 
   const mL = months === 12 ? "12" : String(months);
@@ -465,7 +439,6 @@ function App() {
               <span style={{ color: C.vwap }}><i style={{ background: C.vwap }} />VWAP 20</span>
               <span style={{ color: C.ema21 }}><i style={{ background: C.ema21 }} />EMA21</span>
               <span style={{ color: C.sma20 }}><i style={{ background: C.sma20 }} />SMA20</span>
-              <span className="muted">%B oscillator below</span>
             </div>
           )}
           expanded={expandedChart === "other-bands"}
@@ -482,20 +455,6 @@ function App() {
             <div className="skeleton">Loading...</div>
           )}
         </ChartCard>
-      </div>
-
-      <div className="explanation">
-        <h3>How the signal is calculated</h3>
-        <ul>
-          <li><strong>Trend</strong>: price vs SMA20 / SMA50 / EMA21.</li>
-          <li><strong>RSI</strong>: 14-day (card) and 21-day (chart) - above 55 bullish, below 45 bearish.</li>
-          <li><strong>MACD(12,26,9)</strong>: line plus 9-period signal line and histogram.</li>
-          <li><strong>Bollinger(20, 2 sigma) + VWAP(20)</strong>: mean-reversion bands, volume-weighted average price, %B position.</li>
-          <li>Scores combine: 2 or more = BULLISH, -1.5 or less = BEARISH, else NEUTRAL.</li>
-        </ul>
-        <p style={{ marginTop: 10 }}>
-          Data served by the local Node backend. Educational purposes only - <strong>not financial advice</strong>.
-        </p>
       </div>
 
       <footer>Built with React + Express - technical analysis is not a guarantee of future performance</footer>

@@ -131,6 +131,7 @@ export function analyze(bars) {
   const { macd, signal, hist } = macdSeries(closes, 12, 26, 9);
   const bb = bollingerSeries(closes, 20, 2);
   const vwap = vwapSeries(closes, volumes, 20);
+  const volSma21 = smaSeries(volumes, 21);
 
   const enriched = list.map((b, i) => ({
     ...b,
@@ -147,6 +148,7 @@ export function analyze(bars) {
     bbL: bb.lower[i],
     vwap: vwap[i],
     pctB: percentB(b.c, bb.upper[i], bb.lower[i]),
+    volSma21: volSma21[i],
   }));
 
   const price = closes.length ? closes[closes.length - 1] : null;
@@ -166,6 +168,7 @@ export function analyze(bars) {
     bbL: last(bb.lower),
     pctB: percentB(price, last(bb.upper), last(bb.lower)),
     vwap: last(vwap),
+    volSma21: last(volSma21),
   };
 }
 
