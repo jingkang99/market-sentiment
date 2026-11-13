@@ -7,7 +7,7 @@
  *
  * Context fields currently available (from analyze()):
  *   price, sma20, sma50, ema21, rsi, rsi21, macd, macdSignal, macdHist,
- *   bbU, bbM, bbL, pctB, vwap
+ *   bbU, bbM, bbL, pctB, vwap, adx, plusDI, minusDI
  */
 
 /* ---------- thresholds (tune here) ---------- */
@@ -17,6 +17,7 @@ export const THRESHOLDS = {
   bearish: -1.5,    // single-symbol score <= this → BEARISH
   overallBull: 1.5, // average of symbols >= this  → BULLISH
   overallBear: -1,  // average of symbols <= this  → BEARISH
+  adxStrong: 25,    // ADX above this = strong trend
 };
 
 /* ---------- individual rules ---------- */
@@ -76,6 +77,40 @@ export const RULES = [
         return { score: 1, reason: "MACD positive (bullish momentum)" };
       }
       return { score: -1, reason: "MACD negative (bearish momentum)" };
+    },
+  },
+
+  {
+    id: "adx-strength",
+    description: "ADX(14) trend strength with +DI / -DI direction",
+    evaluate(ctx) {
+      const { adx, plusDI, minusDI } = ctx;
+      if (adx == null) return null;
+      const thr = THRESHOLDS.adxStrong;
+      if (adx > thr) {
+        // Strong trend — direction from DI balance
+        if (plusDI != null && minusDI != null && plusDI > minusDI) {
+          return {
+            score: 1,
+            reason: "ADX " + adx.toFixed(1) + " > " + thr + " with +DI > -DI (strong uptrend)",
+          };
+        }
+        if (plusDI != null && minusDI != null && minusDI > plusDI) {
+          return {
+            score: -1,
+            reason: "ADX " + adx.toFixed(1) + " > " + thr + " with -DI > +DI (strong downtrend)",
+          };
+        }
+        return {
+          score: 0.5,
+          reason: "ADX " + adx.toFixed(1) + " > " + thr + " (strong trend, direction unclear)",
+        };
+      }
+      // Weak / ranging market
+      return {
+        score: -0.25,
+        reason: "ADX " + adx.toFixed(1) + " <= " + thr + " (weak / ranging trend)",
+      };
     },
   },
 
@@ -190,5 +225,8 @@ export function contextFrom(data, analysis) {
     bbL: analysis.bbL,
     pctB: analysis.pctB,
     vwap: analysis.vwap,
+    adx: analysis.adx,
+    plusDI: analysis.plusDI,
+    minusDI: analysis.minusDI,
   };
 }

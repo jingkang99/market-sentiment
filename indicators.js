@@ -117,6 +117,92 @@ export function percentB(price, upper, lower) {
   return ((price - lower) / (upper - lower)) * 100;
 }
 
+/**
+ * Wilder ADX(period) with +DI / -DI.
+ * Returns { adx, plusDI, minusDI } series (null until enough bars).
+ */
+export function adxSeries(bars, period = 14) {
+  const n = (bars || []).length;
+  const adx = new Array(n).fill(null);
+  const plusDI = new Array(n).fill(null);
+  const minusDI = new Array(n).fill(null);
+  if (n < period + 2) return { adx, plusDI, minusDI };
+
+  const tr = new Array(n).fill(0);
+  const pdm = new Array(n).fill(0);
+  const mdm = new Array(n).fill(0);
+
+  for (let i = 1; i < n; i++) {
+    const h = bars[i].h;
+    const l = bars[i].l;
+    const prevC = bars[i - 1].c;
+    const prevH = bars[i - 1].h;
+    const prevL = bars[i - 1].l;
+    const up = h - prevH;
+    const down = prevL - l;
+    pdm[i] = up > down && up > 0 ? up : 0;
+    mdm[i] = down > up && down > 0 ? down : 0;
+    tr[i] = Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC));
+  }
+
+  // First Wilder smooth: sum of first `period` values starting at index 1
+  let atr = 0;
+  let pDM = 0;
+  let mDM = 0;
+  for (let i = 1; i <= period; i++) {
+    atr += tr[i];
+    pDM += pdm[i];
+    mDM += mdm[i];
+  }
+
+  const dxArr = new Array(n).fill(null);
+  const diAt = (idx, smoothP, smoothM, smoothTR) => {
+    if (!smoothTR) return { pdi: null, mdi: null, dx: null };
+    const pdi = 100 * (smoothP / smoothTR);
+    const mdi = 100 * (smoothM / smoothTR);
+    const den = pdi + mdi;
+    const dx = den === 0 ? 0 : (100 * Math.abs(pdi - mdi)) / den;
+    plusDI[idx] = pdi;
+    minusDI[idx] = mdi;
+    dxArr[idx] = dx;
+    return { pdi, mdi, dx };
+  };
+
+  diAt(period, pDM, mDM, atr);
+
+  for (let i = period + 1; i < n; i++) {
+    atr = atr - atr / period + tr[i];
+    pDM = pDM - pDM / period + pdm[i];
+    mDM = mDM - mDM / period + mdm[i];
+    diAt(i, pDM, mDM, atr);
+  }
+
+  // First ADX = average of first `period` DX values (from index period .. 2*period-1)
+  const adxStart = period * 2 - 1;
+  if (adxStart >= n) return { adx, plusDI, minusDI };
+
+  let adxVal = 0;
+  let counted = 0;
+  for (let i = period; i <= adxStart; i++) {
+    if (dxArr[i] != null) {
+      adxVal += dxArr[i];
+      counted += 1;
+    }
+  }
+  if (counted > 0) {
+    adxVal /= counted;
+    adx[adxStart] = adxVal;
+  }
+
+  for (let i = adxStart + 1; i < n; i++) {
+    if (dxArr[i] == null || adxVal == null) continue;
+    adxVal = (adxVal * (period - 1) + dxArr[i]) / period;
+    adx[i] = adxVal;
+  }
+
+  return { adx, plusDI, minusDI };
+}
+
 /* Attach every indicator to every bar so the charts and cards share one source of truth */
 export function analyze(bars) {
   const list = bars || [];
@@ -126,18 +212,21 @@ export function analyze(bars) {
   const sma20 = smaSeries(closes, 20);
   const sma50 = smaSeries(closes, 50);
   const ema21 = emaSeries(closes, 21);
+  const ema200 = emaSeries(closes, 200);
   const rsi14 = rsiSeries(closes, 14);
   const rsi21 = rsiSeries(closes, 21);
   const { macd, signal, hist } = macdSeries(closes, 12, 26, 9);
   const bb = bollingerSeries(closes, 20, 2);
   const vwap = vwapSeries(closes, volumes, 20);
   const volSma21 = smaSeries(volumes, 21);
+  const { adx, plusDI, minusDI } = adxSeries(list, 14);
 
   const enriched = list.map((b, i) => ({
     ...b,
     sma20: sma20[i],
     sma50: sma50[i],
     ema21: ema21[i],
+    ema200: ema200[i],
     rsi: rsi14[i],
     rsi21: rsi21[i],
     macd: macd[i],
@@ -149,6 +238,9 @@ export function analyze(bars) {
     vwap: vwap[i],
     pctB: percentB(b.c, bb.upper[i], bb.lower[i]),
     volSma21: volSma21[i],
+    adx: adx[i],
+    plusDI: plusDI[i],
+    minusDI: minusDI[i],
   }));
 
   const price = closes.length ? closes[closes.length - 1] : null;
@@ -158,6 +250,7 @@ export function analyze(bars) {
     sma20: last(sma20),
     sma50: last(sma50),
     ema21: last(ema21),
+    ema200: last(ema200),
     rsi: last(rsi14),
     rsi21: last(rsi21),
     macd: last(macd),
@@ -169,6 +262,9 @@ export function analyze(bars) {
     pctB: percentB(price, last(bb.upper), last(bb.lower)),
     vwap: last(vwap),
     volSma21: last(volSma21),
+    adx: last(adx),
+    plusDI: last(plusDI),
+    minusDI: last(minusDI),
   };
 }
 

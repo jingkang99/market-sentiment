@@ -1,0 +1,14 @@
+# Custom Market Breadth watchlist (max 11 symbols)
+# One symbol per line. Lines starting with # are ignored.
+# Extra symbols beyond 11 are ignored.
+AAPL
+MSFT
+NVDA
+AMZN
+GOOGL
+META
+TSLA
+JPM
+XOM
+UNH
+JNJ

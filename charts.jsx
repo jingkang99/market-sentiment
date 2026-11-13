@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 
-export const CHART_VERSION = "c6-vol-sma21"; // bump to bust the browser cache
+export const CHART_VERSION = "c7-theme"; // bump to bust the browser cache
 console.log("[charts] build", CHART_VERSION);
 
-const C = {
+const DARK = {
   up: "#22c55e",
   down: "#ef4444",
   sma20: "#3b82f6",
@@ -19,8 +19,54 @@ const C = {
   grid: "#232a36",
   axis: "#8b94a7",
   text: "#e8ecf3",
+  pane: "#12161f",
+  crosshair: "rgba(232,236,243,0.35)",
+  volUp: "rgba(34,197,94,.35)",
+  volDown: "rgba(239,68,68,.35)",
+  rsiOver: "rgba(239,68,68,.08)",
+  rsiUnder: "rgba(34,197,94,.08)",
+  histUp: "rgba(34,197,94,.55)",
+  histDown: "rgba(239,68,68,.55)",
+  bbFill: "rgba(168,85,247,0.13)",
+  pctOver: "rgba(239,68,68,.10)",
+  pctUnder: "rgba(34,197,94,.10)",
 };
-export { C as COLORS };
+
+const LIGHT = {
+  up: "#16a34a",
+  down: "#dc2626",
+  sma20: "#2563eb",
+  sma50: "#d97706",
+  ema21: "#059669",
+  bb: "#9333ea",
+  vwap: "#0891b2",
+  rsi: "#7c3aed",
+  rsi21: "#db2777",
+  macd: "#0284c7",
+  macdSignal: "#ca8a04",
+  volSma: "#ea580c",
+  grid: "#e2e8f0",
+  axis: "#64748b",
+  text: "#1e293b",
+  pane: "#f3f5f9",
+  crosshair: "rgba(30,41,59,0.28)",
+  volUp: "rgba(22,163,74,.30)",
+  volDown: "rgba(220,38,38,.30)",
+  rsiOver: "rgba(220,38,38,.08)",
+  rsiUnder: "rgba(22,163,74,.08)",
+  histUp: "rgba(22,163,74,.50)",
+  histDown: "rgba(220,38,38,.50)",
+  bbFill: "rgba(147,51,234,0.10)",
+  pctOver: "rgba(220,38,38,.10)",
+  pctUnder: "rgba(22,163,74,.10)",
+};
+
+export const COLORS = DARK;
+const C = DARK;
+
+function palette(theme) {
+  return theme === "light" ? LIGHT : DARK;
+}
 
 const MONTH_MS = 30.44 * 24 * 3600 * 1000;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -28,7 +74,8 @@ const fmt = (v, d = 2) => (v == null || v === undefined || !isFinite(v) ? "—" 
 const fmtDate = (t) =>
   new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 
-export function PriceChart({ bars = [], months = 6, height = 470, variant = "candles" }) {
+export function PriceChart({ bars = [], months = 6, height = 470, variant = "candles", theme = "dark" }) {
+  const C = palette(theme);
   // NOTE: callback refs (never null, never the wrong node) + hit-testing via e.currentTarget
   const canvasEl = useRef(null);
   const wrapEl = useRef(null);
@@ -133,7 +180,7 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
     const yPrice = (p) => pricePane.top + pricePane.h - ((p - min) / (max - min)) * pricePane.h;
 
     g.panes.forEach((p) => {
-      ctx.fillStyle = "#12161f";
+      ctx.fillStyle = C.pane;
       ctx.fillRect(g.plotX, p.top, g.plotW, p.h);
     });
 
@@ -187,7 +234,7 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
       }
       if (started) {
         ctx.closePath();
-        ctx.fillStyle = "rgba(168,85,247,0.13)";
+        ctx.fillStyle = C.bbFill;
         ctx.fill();
       }
       lineOn("bbU", C.bb, 1.3, [5, 4], yPrice);
@@ -233,7 +280,7 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
       for (let i = 0; i < visible.length; i++) {
         const b = visible[i];
         if (!b.v) continue;
-        ctx.fillStyle = b.c >= b.o ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)";
+        ctx.fillStyle = b.c >= b.o ? C.volUp : C.volDown;
         const y = yVol(b.v);
         ctx.fillRect(xAt(i) - vw / 2, y, vw, vp.top + vp.h - y);
       }
@@ -248,9 +295,9 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
     if (variant !== "bands") {
       const rp = P("rsi");
       const yRsi = (r) => rp.top + rp.h - (r / 100) * rp.h;
-      ctx.fillStyle = "rgba(239,68,68,.08)";
+      ctx.fillStyle = C.rsiOver;
       ctx.fillRect(g.plotX, rp.top, g.plotW, (70 / 100) * rp.h);
-      ctx.fillStyle = "rgba(34,197,94,.08)";
+      ctx.fillStyle = C.rsiUnder;
       ctx.fillRect(g.plotX, rp.top + (70 / 100) * rp.h, g.plotW, (30 / 100) * rp.h);
       ctx.strokeStyle = C.grid;
       ctx.setLineDash([3, 3]);
@@ -280,7 +327,7 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
         if (h == null || h === undefined) continue;
         const zero = yM(0);
         const y = yM(h);
-        ctx.fillStyle = h >= 0 ? "rgba(34,197,94,.55)" : "rgba(239,68,68,.55)";
+        ctx.fillStyle = h >= 0 ? C.histUp : C.histDown;
         ctx.fillRect(xAt(i) - hw / 2, Math.min(y, zero), hw, Math.max(1, Math.abs(y - zero)));
       }
       ctx.strokeStyle = C.grid;
@@ -300,9 +347,9 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
     if (variant === "bands") {
       const bp = P("pctb");
       const yB = (v) => bp.top + bp.h - (v / 100) * bp.h;
-      ctx.fillStyle = "rgba(239,68,68,.10)";
+      ctx.fillStyle = C.pctOver;
       ctx.fillRect(g.plotX, bp.top, g.plotW, (20 / 100) * bp.h);
-      ctx.fillStyle = "rgba(34,197,94,.10)";
+      ctx.fillStyle = C.pctUnder;
       ctx.fillRect(g.plotX, bp.top + (80 / 100) * bp.h, g.plotW, (20 / 100) * bp.h);
       ctx.strokeStyle = C.grid;
       ctx.setLineDash([3, 3]);
@@ -325,7 +372,7 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
     if (hover && hover.i != null && visible[hover.i]) {
       const hx = xAt(hover.i);
       ctx.save();
-      ctx.strokeStyle = "rgba(232,236,243,0.35)";
+      ctx.strokeStyle = C.crosshair;
       ctx.lineWidth = 1;
       ctx.setLineDash([2, 3]);
       ctx.beginPath();
@@ -334,7 +381,7 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
       ctx.stroke();
       ctx.restore();
     }
-  }, [geom, visible, hover, variant]);
+  }, [geom, visible, hover, variant, theme]);
 
   useEffect(() => { draw(); }, [draw]);
 

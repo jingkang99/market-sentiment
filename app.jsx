@@ -126,7 +126,7 @@ function normalizeChart(result, symbol) {
 }
 
 async function fetchViaPublicProxies(symbol) {
-  const url = "https://query1.finance.yahoo.com/v8/finance/chart/" + symbol + "?interval=1d&range=1y";
+  const url = "https://query1.finance.yahoo.com/v8/finance/chart/" + symbol + "?interval=1d&range=2y";
   let lastError = null;
   for (const mk of PROXIES) {
     try {
@@ -194,14 +194,130 @@ function StockCard(props) {
         <Indicator label="RSI (14)" value={a.rsi} />
         <Indicator label="RSI (21)" value={a.rsi21} />
         <Indicator label="MACD" value={a.macd} format={(v) => (v == null ? "-" : Number(v).toFixed(3))} />
+        <Indicator label="ADX (14)" value={a.adx} />
         <Indicator label="BB %B" value={a.pctB} format={(v) => (v == null ? "-" : Number(v).toFixed(0))} />
         <Indicator label="VWAP 20" value={a.vwap} />
       </div>
 
       <div className={"signal " + sig.label.toLowerCase()}>{sig.label}</div>
       <div style={{ marginTop: 12, fontSize: "0.8rem", color: "var(--muted)" }}>
-	{sig.reasons.slice(0, 3).map((r, i) => (<div key={i}>- {r}</div>))}
+	{sig.reasons.slice(0, 4).map((r, i) => (<div key={i}>- {r}</div>))}
       </div>
+    </div>
+  );
+}
+
+/* ---------- market breadth (sector ETFs) ---------- */
+
+const SECTOR_SYMBOLS = ["XLK", "XLF", "XLV", "XLY", "XLP", "XLE", "XLI", "XLB", "XLU", "XLRE", "XLC"];
+
+const SECTOR_NAMES = {
+  XLK: "Information Technology",
+  XLF: "Financials",
+  XLV: "Health Care",
+  XLY: "Consumer Discretionary",
+  XLP: "Consumer Staples",
+  XLE: "Energy",
+  XLI: "Industrials",
+  XLB: "Materials",
+  XLU: "Utilities",
+  XLRE: "Real Estate",
+  XLC: "Communication Services",
+};
+
+function parseBreadthList(text) {
+  const out = [];
+  const seen = new Set();
+  const lines = String(text || "").split(/\r?\n/);
+  for (const raw of lines) {
+    const line = raw.replace(/#.*$/, "").trim().toUpperCase();
+    if (!line) continue;
+    // allow comma or space separated on one line
+    const parts = line.split(/[\s,;]+/).filter(Boolean);
+    for (const p of parts) {
+      if (!/^[A-Z0-9.^=]{1,15}$/.test(p)) continue;
+      if (seen.has(p)) continue;
+      seen.add(p);
+      out.push(p);
+      if (out.length >= 11) return out;
+    }
+  }
+  return out;
+}
+
+async function loadBreadthWatchlist() {
+  try {
+    const res = await fetch("/breadth-stocks.txt?ts=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    return parseBreadthList(text);
+  } catch (e) {
+    console.warn("[breadth] could not load breadth-stocks.txt:", e && e.message);
+    return [];
+  }
+}
+
+function BreadthTile({ data, symbol, tip }) {
+  const sym = (data && data.symbol) || symbol;
+  const tipText = tip || SECTOR_NAMES[sym] || (data && data.name) || sym;
+
+  if (!data) {
+    return (
+      <div className="breadth-tile breadth-loading">
+        <div className="breadth-sym" data-tip={tipText}>{sym}</div>
+        <div className="breadth-price">…</div>
+      </div>
+    );
+  }
+  const a = analyze(data.bars || []);
+  const price = data.price;
+  const above21 = a.ema21 != null && price != null && price > a.ema21;
+  const above200 = a.ema200 != null && price != null && price > a.ema200;
+  let tone = "mixed";
+  if (above21 && above200) tone = "bull";
+  else if (!above21 && !above200) tone = "bear";
+
+  return (
+    <div className={"breadth-tile breadth-" + tone}>
+      <div className="breadth-sym" data-tip={tipText}>{sym}</div>
+      <div className="breadth-price">
+        {price != null ? "$" + Number(price).toFixed(2) : "—"}
+      </div>
+      <div className="breadth-flags">
+        <span className={above21 ? "flag-up" : "flag-down"}>
+          {above21 ? "↑" : "↓"} 21E
+        </span>
+        <span className={above200 ? "flag-up" : "flag-down"}>
+          {above200 ? "↑" : "↓"} 200E
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MarketBreadth({ sectors, watchlist, watchData }) {
+  const custom = (watchlist || []).slice(0, 11);
+  return (
+    <div className="overall breadth">
+      <h2>Market Breadth</h2>
+      <p className="breadth-sub">Price vs 21-day EMA and 200-day EMA</p>
+      <div className="breadth-grid">
+        {SECTOR_SYMBOLS.map((sym) => (
+          <BreadthTile key={sym} symbol={sym} data={sectors[sym] || null} tip={SECTOR_NAMES[sym]} />
+        ))}
+      </div>
+      {custom.length > 0 && (
+        <div className="breadth-grid breadth-grid-custom">
+          {custom.map((sym) => (
+            <BreadthTile
+              key={"w-" + sym}
+              symbol={sym}
+              data={(watchData && watchData[sym]) || null}
+              tip={(watchData && watchData[sym] && watchData[sym].name) || sym}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -213,6 +329,9 @@ const SYMBOL_RE = /^[A-Z0-9.^=]{1,15}$/;
 function App() {
   const [spy, setSpy] = useState(null);
   const [other, setOther] = useState(null);
+  const [sectors, setSectors] = useState({});
+  const [watchlist, setWatchlist] = useState([]);
+  const [watchData, setWatchData] = useState({});
   const [symbol, setSymbol] = useState(() => {
     try { return localStorage.getItem("ms.symbol") || "QQQ"; } catch (e) { return "QQQ"; }
   });
@@ -225,6 +344,20 @@ function App() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [months, setMonths] = useState(6);
   const [expandedChart, setExpandedChart] = useState(null);
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem("ms.theme");
+      if (saved === "light" || saved === "dark") return saved;
+    } catch (e) {}
+    return "dark";
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem("ms.theme", theme); } catch (e) {}
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
 
   const expandHeight = useMemo(() => {
     if (typeof window === "undefined") return 640;
@@ -235,7 +368,17 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const results = await Promise.allSettled([fetchYahooChart("SPY"), fetchYahooChart(symbol)]);
+      const list = await loadBreadthWatchlist();
+      setWatchlist(list);
+
+      const sectorFetches = SECTOR_SYMBOLS.map((sym) => fetchYahooChart(sym));
+      const watchFetches = list.map((sym) => fetchYahooChart(sym));
+      const results = await Promise.allSettled([
+        fetchYahooChart("SPY"),
+        fetchYahooChart(symbol),
+        ...sectorFetches,
+        ...watchFetches,
+      ]);
       const s = results[0];
       const o = results[1];
       let hasData = false;
@@ -244,6 +387,32 @@ function App() {
       else { console.error("SPY failed:", s.reason); errs.push("SPY: " + ((s.reason && s.reason.message) || "failed")); }
       if (o.status === "fulfilled") { setOther(o.value); hasData = true; }
       else { console.error(symbol + " failed:", o.reason); errs.push(symbol + ": " + ((o.reason && o.reason.message) || "failed")); setOther(null); }
+
+      const nextSectors = {};
+      SECTOR_SYMBOLS.forEach((sym, i) => {
+        const r = results[2 + i];
+        if (r && r.status === "fulfilled") {
+          nextSectors[sym] = r.value;
+          hasData = true;
+        } else {
+          console.error(sym + " failed:", r && r.reason);
+        }
+      });
+      setSectors(nextSectors);
+
+      const nextWatch = {};
+      const watchOffset = 2 + SECTOR_SYMBOLS.length;
+      list.forEach((sym, i) => {
+        const r = results[watchOffset + i];
+        if (r && r.status === "fulfilled") {
+          nextWatch[sym] = r.value;
+          hasData = true;
+        } else {
+          console.error(sym + " failed:", r && r.reason);
+        }
+      });
+      setWatchData(nextWatch);
+
       if (hasData) setLastUpdated(new Date());
       if (errs.length) setError(errs.join(" | ") + (hasData ? " (partial data shown)" : " - is the local server running? Try: npm start"));
     } catch (e) {
@@ -311,8 +480,25 @@ function App() {
   return (
     <div className="container">
       <header>
-        <h1>SPY &amp; Market Sentiment</h1>
-        <p>Real-time quotes, technical indicators, candlestick + Bollinger / VWAP charts</p>
+        <div className="header-text">
+          <h1>SPY &amp; Market Sentiment</h1>
+          <p>Real-time quotes, technical indicators, candlestick + Bollinger / VWAP charts</p>
+        </div>
+        <button type="button" className="theme-toggle" onClick={toggleTheme} title="Switch theme">
+          <span className="theme-icon" aria-hidden="true">
+            {theme === "dark" ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            )}
+          </span>
+          <span className="theme-label">{theme === "dark" ? "Light" : "Dark"}</span>
+        </button>
       </header>
 
       <div className="controls">
@@ -359,6 +545,8 @@ function App() {
         </div>
       )}
 
+      <MarketBreadth sectors={sectors} watchlist={watchlist} watchData={watchData} />
+
       <div className="cards">
         <StockCard data={spy} />
         <StockCard data={other} />
@@ -377,6 +565,7 @@ function App() {
               bars={spyA.enriched}
               months={months}
               height={expandedChart === "spy-candles" ? expandHeight : 470}
+              theme={theme}
             />
           ) : (
             <div className="skeleton">Loading chart...</div>
@@ -395,6 +584,7 @@ function App() {
               bars={otherA.enriched}
               months={months}
               height={expandedChart === "other-candles" ? expandHeight : 470}
+              theme={theme}
             />
           ) : (
             <div className="skeleton">Loading chart...</div>
@@ -424,6 +614,7 @@ function App() {
               months={months}
               variant="bands"
               height={expandedChart === "spy-bands" ? expandHeight : 330}
+              theme={theme}
             />
           ) : (
             <div className="skeleton">Loading...</div>
@@ -450,6 +641,7 @@ function App() {
               months={months}
               variant="bands"
               height={expandedChart === "other-bands" ? expandHeight : 330}
+              theme={theme}
             />
           ) : (
             <div className="skeleton">Loading...</div>
