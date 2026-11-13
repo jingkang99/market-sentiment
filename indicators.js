@@ -46,18 +46,32 @@ export function emaSparse(values, period) {
   return out;
 }
 
+/* Wilder RSI (smoothed average of gains/losses) */
 export function rsiSeries(values, period = 14) {
   const out = new Array(values.length).fill(null);
   if (values.length < period + 1) return out;
-  for (let i = period; i < values.length; i++) {
-    let gains = 0, losses = 0;
-    for (let j = i - period + 1; j <= i; j++) {
-      const ch = values[j] - values[j - 1];
-      if (ch >= 0) gains += ch;
-      else losses -= ch;
-    }
-    const ag = gains / period, al = losses / period;
-    out[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+
+  let avgGain = 0;
+  let avgLoss = 0;
+
+  // Seed with simple average of the first `period` changes
+  for (let i = 1; i <= period; i++) {
+    const ch = values[i] - values[i - 1];
+    if (ch >= 0) avgGain += ch;
+    else avgLoss -= ch;
+  }
+  avgGain /= period;
+  avgLoss /= period;
+  out[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+
+  // Wilder smoothing for the rest
+  for (let i = period + 1; i < values.length; i++) {
+    const ch = values[i] - values[i - 1];
+    const gain = ch > 0 ? ch : 0;
+    const loss = ch < 0 ? -ch : 0;
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+    out[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
   }
   return out;
 }
@@ -119,6 +133,7 @@ export function percentB(price, upper, lower) {
 
 /**
  * Wilder ADX(period) with +DI / -DI.
+ * Uses proper Wilder smoothing for TR, +DM, -DM and for the final ADX.
  * Returns { adx, plusDI, minusDI } series (null until enough bars).
  */
 export function adxSeries(bars, period = 14) {
@@ -126,7 +141,7 @@ export function adxSeries(bars, period = 14) {
   const adx = new Array(n).fill(null);
   const plusDI = new Array(n).fill(null);
   const minusDI = new Array(n).fill(null);
-  if (n < period + 2) return { adx, plusDI, minusDI };
+  if (n < period * 2) return { adx, plusDI, minusDI };
 
   const tr = new Array(n).fill(0);
   const pdm = new Array(n).fill(0);
@@ -145,7 +160,7 @@ export function adxSeries(bars, period = 14) {
     tr[i] = Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC));
   }
 
-  // First Wilder smooth: sum of first `period` values starting at index 1
+  // Seed with sum of first `period` values (index 1 .. period)
   let atr = 0;
   let pDM = 0;
   let mDM = 0;
@@ -156,8 +171,14 @@ export function adxSeries(bars, period = 14) {
   }
 
   const dxArr = new Array(n).fill(null);
+
   const diAt = (idx, smoothP, smoothM, smoothTR) => {
-    if (!smoothTR) return { pdi: null, mdi: null, dx: null };
+    if (!smoothTR || smoothTR <= 0) {
+      plusDI[idx] = null;
+      minusDI[idx] = null;
+      dxArr[idx] = null;
+      return;
+    }
     const pdi = 100 * (smoothP / smoothTR);
     const mdi = 100 * (smoothM / smoothTR);
     const den = pdi + mdi;
@@ -165,11 +186,11 @@ export function adxSeries(bars, period = 14) {
     plusDI[idx] = pdi;
     minusDI[idx] = mdi;
     dxArr[idx] = dx;
-    return { pdi, mdi, dx };
   };
 
   diAt(period, pDM, mDM, atr);
 
+  // Wilder smooth the rest
   for (let i = period + 1; i < n; i++) {
     atr = atr - atr / period + tr[i];
     pDM = pDM - pDM / period + pdm[i];
@@ -177,25 +198,25 @@ export function adxSeries(bars, period = 14) {
     diAt(i, pDM, mDM, atr);
   }
 
-  // First ADX = average of first `period` DX values (from index period .. 2*period-1)
+  // First ADX = simple average of the first `period` DX values
   const adxStart = period * 2 - 1;
   if (adxStart >= n) return { adx, plusDI, minusDI };
 
   let adxVal = 0;
   let counted = 0;
   for (let i = period; i <= adxStart; i++) {
-    if (dxArr[i] != null) {
+    if (dxArr[i] != null && isFinite(dxArr[i])) {
       adxVal += dxArr[i];
       counted += 1;
     }
   }
-  if (counted > 0) {
-    adxVal /= counted;
-    adx[adxStart] = adxVal;
-  }
+  if (counted === 0) return { adx, plusDI, minusDI };
+  adxVal /= counted;
+  adx[adxStart] = adxVal;
 
+  // Subsequent ADX uses Wilder smoothing
   for (let i = adxStart + 1; i < n; i++) {
-    if (dxArr[i] == null || adxVal == null) continue;
+    if (dxArr[i] == null || !isFinite(dxArr[i])) continue;
     adxVal = (adxVal * (period - 1) + dxArr[i]) / period;
     adx[i] = adxVal;
   }

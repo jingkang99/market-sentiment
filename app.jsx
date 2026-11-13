@@ -56,14 +56,31 @@ function ChartCard({ id, title, legend, expanded, onToggle, children }) {
 
 async function fetchJSON(url, timeoutMs = 15000) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new DOMException("Request timed out", "TimeoutError")), timeoutMs);
+  const timer = setTimeout(() => controller.abort(new DOMException("Request timed out after " + timeoutMs + "ms", "TimeoutError")), timeoutMs);
   try {
     const res = await fetch(url, { signal: controller.signal, headers: { Accept: "application/json" } });
     if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error("HTTP");
+      let detail = "";
+      try {
+        const body = await res.text();
+        if (body) {
+          try {
+            const j = JSON.parse(body);
+            detail = j.error || j.message || body.slice(0, 120);
+          } catch {
+            detail = body.slice(0, 120);
+          }
+        }
+      } catch {}
+      const msg = "HTTP " + res.status + (res.statusText ? " " + res.statusText : "") + (detail ? " — " + detail : "");
+      throw new Error(msg);
     }
     return await res.json();
+  } catch (e) {
+    if (e && e.name === "AbortError") {
+      throw new Error("Request timed out (" + timeoutMs + "ms)");
+    }
+    throw e;
   } finally {
     clearTimeout(timer);
   }
@@ -71,9 +88,11 @@ async function fetchJSON(url, timeoutMs = 15000) {
 
 async function fetchLocalQuote(symbol) {
   const data = await fetchJSON("/api/quote/" + encodeURIComponent(symbol));
-  if (!data || data.error) throw new Error((data && data.error) || ("Local API error for " + symbol));
+  if (!data || data.error) {
+    throw new Error((data && data.error) || ("Local API returned no data for " + symbol));
+  }
   if (!Array.isArray(data.closes) || data.closes.length < 50) {
-    throw new Error("Local API returned too little history for " + symbol);
+    throw new Error("Local API returned only " + ((data.closes && data.closes.length) || 0) + " closes for " + symbol + " (need 50+)");
   }
   if (!Array.isArray(data.bars) || data.bars.length < 50) {
     data.bars = data.closes.map((c, i) => ({
@@ -132,13 +151,13 @@ async function fetchViaPublicProxies(symbol) {
     try {
       const raw = await fetchJSON(mk(url), 15000);
       const r = raw && raw.chart && raw.chart.result && raw.chart.result[0];
-      if (!r) throw new Error("Proxy returned no chart data");
+      if (!r) throw new Error("Proxy returned empty chart for " + symbol);
       return normalizeChart(r, symbol);
     } catch (e) {
       lastError = e;
     }
   }
-  throw lastError || new Error("All CORS proxies failed");
+  throw lastError || new Error("All public CORS proxies failed for " + symbol);
 }
 
 async function fetchYahooChart(symbol) {
