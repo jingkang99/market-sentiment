@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 
-export const CHART_VERSION = "c7-theme"; // bump to bust the browser cache
+export const CHART_VERSION = "c8-adx"; // bump to bust the browser cache
 console.log("[charts] build", CHART_VERSION);
 
 const DARK = {
@@ -16,6 +16,10 @@ const DARK = {
   macd: "#38bdf8",
   macdSignal: "#fbbf24",
   volSma: "#f97316",
+  adx: "#facc15",
+  plusDI: "#22c55e",
+  minusDI: "#ef4444",
+  adxStrong: "rgba(250,204,21,0.12)",
   grid: "#232a36",
   axis: "#8b94a7",
   text: "#e8ecf3",
@@ -45,6 +49,10 @@ const LIGHT = {
   macd: "#0284c7",
   macdSignal: "#ca8a04",
   volSma: "#ea580c",
+  adx: "#ca8a04",
+  plusDI: "#16a34a",
+  minusDI: "#dc2626",
+  adxStrong: "rgba(202,138,4,0.10)",
   grid: "#e2e8f0",
   axis: "#64748b",
   text: "#1e293b",
@@ -110,16 +118,17 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
     const plotX = PAD.left;
     const plotW = Math.max(60, W - PAD.left - PAD.right);
     const innerH = Math.max(140, H - PAD.top - PAD.bottom);
-    const gaps = PAD.gap * (variant === "bands" ? 1 : 3);
+    const gaps = PAD.gap * (variant === "bands" ? 1 : 4);
     const usable = innerH - gaps;
     const defs =
       variant === "bands"
         ? [{ key: "price", h: usable * 0.72 }, { key: "pctb", h: usable * 0.28 }]
         : [
-            { key: "price", h: usable * 0.58 },
-            { key: "vol", h: usable * 0.09 },
-            { key: "rsi", h: usable * 0.165 },
-            { key: "macd", h: usable * 0.165 },
+            { key: "price", h: usable * 0.50 },
+            { key: "vol", h: usable * 0.08 },
+            { key: "rsi", h: usable * 0.14 },
+            { key: "macd", h: usable * 0.14 },
+            { key: "adx", h: usable * 0.14 },
           ];
     let top = PAD.top;
     const panes = defs.map((d) => {
@@ -344,6 +353,36 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
       ctx.fillText("signal 9", g.plotX + 88, mp.top + 9);
     }
 
+    if (variant !== "bands") {
+      const ap = P("adx");
+      const yAdx = (v) => ap.top + ap.h - (Math.max(0, Math.min(100, v)) / 100) * ap.h;
+      // strong-trend zone (ADX > 25)
+      ctx.fillStyle = C.adxStrong;
+      ctx.fillRect(g.plotX, ap.top, g.plotW, (75 / 100) * ap.h);
+      ctx.strokeStyle = C.grid;
+      ctx.setLineDash([3, 3]);
+      [20, 25, 40].forEach((lv) => {
+        const y = yAdx(lv);
+        ctx.beginPath();
+        ctx.moveTo(g.plotX, y);
+        ctx.lineTo(g.plotX + g.plotW, y);
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+      lineOn("adx", C.adx, 1.6, [], yAdx);
+      lineOn("plusDI", C.plusDI, 1.2, [], yAdx);
+      lineOn("minusDI", C.minusDI, 1.2, [], yAdx);
+      ctx.fillStyle = C.adx;
+      ctx.textAlign = "left";
+      ctx.fillText("ADX", g.plotX + 4, ap.top + 9);
+      ctx.fillStyle = C.plusDI;
+      ctx.fillText("+DI", g.plotX + 36, ap.top + 9);
+      ctx.fillStyle = C.minusDI;
+      ctx.fillText("-DI", g.plotX + 62, ap.top + 9);
+      ctx.fillStyle = C.axis;
+      ctx.fillText("25", g.plotX + g.plotW + 6, yAdx(25));
+    }
+
     if (variant === "bands") {
       const bp = P("pctb");
       const yB = (v) => bp.top + bp.h - (v / 100) * bp.h;
@@ -513,6 +552,11 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
               <div>
                 <span style={{ color: C.macd }}>MACD {fmt(hb.macd, 3)}</span>{" "}
                 <span style={{ color: C.macdSignal }}>sig {fmt(hb.macdSignal, 3)}</span>
+              </div>
+              <div>
+                <span style={{ color: C.adx }}>ADX {fmt(hb.adx, 1)}</span>{" "}
+                <span style={{ color: C.plusDI }}>+DI {fmt(hb.plusDI, 1)}</span>{" "}
+                <span style={{ color: C.minusDI }}>-DI {fmt(hb.minusDI, 1)}</span>
               </div>
             </>
           )}

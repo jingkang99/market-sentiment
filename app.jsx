@@ -493,6 +493,9 @@ function App() {
       <span style={{ color: C.rsi21 }}><i style={{ background: C.rsi21 }} />RSI21</span>
       <span style={{ color: C.macd }}><i style={{ background: C.macd }} />MACD</span>
       <span style={{ color: C.macdSignal }}><i style={{ background: C.macdSignal }} />sig9</span>
+      <span style={{ color: C.adx }}><i style={{ background: C.adx }} />ADX</span>
+      <span style={{ color: C.plusDI }}><i style={{ background: C.plusDI }} />+DI</span>
+      <span style={{ color: C.minusDI }}><i style={{ background: C.minusDI }} />-DI</span>
     </div>
   );
 
