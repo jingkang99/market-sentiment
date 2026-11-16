@@ -406,7 +406,7 @@ header p {
 
 /* CNN Fear & Greed — title/rating/score reuse .overall h2, .sentiment, .score */
 .overall-right .sentiment {
-  text-transform: capitalize; /* CNN ratings are multi-word (e.g. extreme fear) */
+  text-transform: uppercase;
 }
 .fg-chart-wrap {
   width: 100%;
@@ -686,6 +686,7 @@ header p {
   background: var(--panel-2);
   border-radius: 8px;
   padding: 8px 10px;
+  border: 1px solid transparent;
 }
 .indicator label {
   display: block;
@@ -700,6 +701,25 @@ header p {
   font-weight: 560;
   font-variant-numeric: tabular-nums;
 }
+/* Same bull / bear / mixed palette as Market Breadth tiles */
+.indicator-bull {
+  background: var(--breadth-bull-bg);
+  color: var(--breadth-bull-fg);
+  border-color: rgba(22, 101, 52, 0.12);
+}
+.indicator-bull label { color: inherit; opacity: 0.85; }
+.indicator-bear {
+  background: var(--breadth-bear-bg);
+  color: var(--breadth-bear-fg);
+  border-color: rgba(153, 27, 27, 0.12);
+}
+.indicator-bear label { color: inherit; opacity: 0.85; }
+.indicator-mixed {
+  background: var(--breadth-mixed-bg);
+  color: var(--breadth-mixed-fg);
+  border-color: rgba(138, 100, 32, 0.12);
+}
+.indicator-mixed label { color: inherit; opacity: 0.85; }
 
 .signal {
   display: inline-block;

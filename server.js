@@ -24,12 +24,25 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 const HOST = process.env.HOST || "127.0.0.1";
 
+// Detect pkg binary: process.pkg is set, or __dirname lives under the virtual snapshot
+const IS_PKG =
+  typeof process.pkg !== "undefined" ||
+  (typeof __dirname === "string" && /[\\/]snapshot[\\/]/i.test(__dirname));
+
 const PUBLIC_DIR = path.join(__dirname, "public");
 const ENTRY_JSX = path.join(__dirname, "app.jsx");
 const INDEX_HTML = path.join(PUBLIC_DIR, "index.html");
 const STYLES_CSS = path.join(PUBLIC_DIR, "styles.css");
+const PREBUILT_APP_JS = path.join(PUBLIC_DIR, "app.js");
 
-fs.mkdirSync(PUBLIC_DIR, { recursive: true });
+// Snapshot FS is read-only — never mkdir/write inside the package
+if (!IS_PKG) {
+  try {
+    fs.mkdirSync(PUBLIC_DIR, { recursive: true });
+  } catch (e) {
+    // Ignore — public/ may already exist or FS may be restricted
+  }
+}
 app.disable("x-powered-by");
 
 const YAHOO_HOSTS = [
@@ -64,6 +77,7 @@ function normalizeEncoding(dir) {
       const nul = buf.filter((b) => b === 0).length;
       const utf16 = (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xfe) || nul > buf.length * 0.02;
       if (utf16) {
+        if (IS_PKG) continue; // cannot write into snapshot
         const txt = buf.toString("utf16le").replace(/^\uFEFF/, "").replace(/\u0000/g, "");
         fs.writeFileSync(p, Buffer.from(txt, "utf8"));
         console.log(`[server] ${f}: re-encoded UTF-16/garbled -> UTF-8`);
@@ -75,7 +89,24 @@ function normalizeEncoding(dir) {
 }
 
 function getBundle() {
+  // Prefer pre-built public/app.js when packaged (no esbuild / no writes in snapshot)
+  if (IS_PKG || process.env.USE_PREBUILT_APP === "1") {
+    if (fs.existsSync(PREBUILT_APP_JS)) {
+      if (!bundle.code) {
+        bundle = { mtime: 1, code: fs.readFileSync(PREBUILT_APP_JS, "utf8") };
+        console.log("[server] using pre-built public/app.js (" + (bundle.code.length / 1024).toFixed(0) + " kB)");
+      }
+      return bundle.code;
+    }
+    throw new Error("Packaged build missing public/app.js — run: npm run build");
+  }
+
   if (!fs.existsSync(ENTRY_JSX)) {
+    // Fallback to prebuilt if sources missing
+    if (fs.existsSync(PREBUILT_APP_JS)) {
+      bundle = { mtime: 1, code: fs.readFileSync(PREBUILT_APP_JS, "utf8") };
+      return bundle.code;
+    }
     throw new Error(`app.jsx not found at ${ENTRY_JSX}`);
   }
   const mtime = fs.statSync(ENTRY_JSX).mtimeMs;
@@ -85,6 +116,10 @@ function getBundle() {
   try {
     esbuild = require("esbuild");
   } catch {
+    if (fs.existsSync(PREBUILT_APP_JS)) {
+      bundle = { mtime, code: fs.readFileSync(PREBUILT_APP_JS, "utf8") };
+      return bundle.code;
+    }
     throw new Error("esbuild is not installed.  ->  run:  npm install");
   }
 

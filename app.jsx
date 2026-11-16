@@ -377,7 +377,9 @@ function FearGreedPanel({ data, loading, error, theme }) {
       {error && !current && <div className="fg-error">{error}</div>}
       {current && (
         <>
-          <div className={"sentiment " + sentClass}>{rating}</div>
+          <div className={"sentiment " + sentClass}>
+            {String(rating || "").toUpperCase()}
+          </div>
           <div className="score">
             Score: {Number(score).toFixed(1)}
             {current.previous_close != null
@@ -398,13 +400,66 @@ function FearGreedPanel({ data, loading, error, theme }) {
 function Indicator(props) {
   const label = props.label;
   const value = props.value;
+  const tone = props.tone; // "bull" | "bear" | "mixed" | null
   const format = props.format || ((v) => (v == null || v === undefined ? "-" : Number(v).toFixed(2)));
+  const toneClass =
+    tone === "bull" ? " indicator-bull" : tone === "bear" ? " indicator-bear" : tone === "mixed" ? " indicator-mixed" : "";
   return (
-    <div className="indicator">
+    <div className={"indicator" + toneClass}>
       <label>{label}</label>
       <div>{format(value)}</div>
     </div>
   );
+}
+
+/** Map each indicator to bull / bear / mixed using same spirit as Market Breadth tiles */
+function indicatorTone(id, a, price) {
+  if (price == null || !a) return null;
+  switch (id) {
+    case "sma20":
+      if (a.sma20 == null) return null;
+      return price > a.sma20 ? "bull" : price < a.sma20 ? "bear" : "mixed";
+    case "sma50":
+      if (a.sma50 == null) return null;
+      return price > a.sma50 ? "bull" : price < a.sma50 ? "bear" : "mixed";
+    case "ema21":
+      if (a.ema21 == null) return null;
+      return price > a.ema21 ? "bull" : price < a.ema21 ? "bear" : "mixed";
+    case "rsi14":
+      if (a.rsi == null) return null;
+      if (a.rsi > 55) return "bull";
+      if (a.rsi < 45) return "bear";
+      return "mixed";
+    case "rsi21":
+      if (a.rsi21 == null) return null;
+      if (a.rsi21 > 55) return "bull";
+      if (a.rsi21 < 45) return "bear";
+      return "mixed";
+    case "macd":
+      if (a.macd == null) return null;
+      return a.macd > 0 ? "bull" : a.macd < 0 ? "bear" : "mixed";
+    case "adx":
+      if (a.adx == null) return null;
+      if (a.adx > 25) {
+        if (a.plusDI != null && a.minusDI != null) {
+          if (a.plusDI > a.minusDI) return "bull";
+          if (a.minusDI > a.plusDI) return "bear";
+        }
+        return "mixed";
+      }
+      return "mixed";
+    case "pctB":
+      if (a.pctB == null) return null;
+      // %B: above mid-band (>50) lean bull, below lean bear; extremes still directional
+      if (a.pctB > 50) return "bull";
+      if (a.pctB < 50) return "bear";
+      return "mixed";
+    case "vwap":
+      if (a.vwap == null) return null;
+      return price > a.vwap ? "bull" : price < a.vwap ? "bear" : "mixed";
+    default:
+      return null;
+  }
 }
 
 function StockCard(props) {
@@ -412,6 +467,7 @@ function StockCard(props) {
   if (!data) return null;
   const a = useMemo(() => analyze(data.bars || []), [data]);
   const sig = useMemo(() => getSignal(contextFrom(data, a)), [data, a]);
+  const price = data.price;
   return (
     <div className="card">
       <div className="card-header">
@@ -431,20 +487,32 @@ function StockCard(props) {
       </div>
 
       <div className="indicators">
-        <Indicator label="SMA 20" value={a.sma20} />
-        <Indicator label="SMA 50" value={a.sma50} />
-        <Indicator label="EMA 21" value={a.ema21} />
-        <Indicator label="RSI (14)" value={a.rsi} />
-        <Indicator label="RSI (21)" value={a.rsi21} />
-        <Indicator label="MACD" value={a.macd} format={(v) => (v == null ? "-" : Number(v).toFixed(3))} />
-        <Indicator label="ADX (14)" value={a.adx} />
-        <Indicator label="BB %B" value={a.pctB} format={(v) => (v == null ? "-" : Number(v).toFixed(0))} />
-        <Indicator label="VWAP 20" value={a.vwap} />
+        <Indicator label="SMA 20" value={a.sma20} tone={indicatorTone("sma20", a, price)} />
+        <Indicator label="SMA 50" value={a.sma50} tone={indicatorTone("sma50", a, price)} />
+        <Indicator label="EMA 21" value={a.ema21} tone={indicatorTone("ema21", a, price)} />
+        <Indicator label="RSI (14)" value={a.rsi} tone={indicatorTone("rsi14", a, price)} />
+        <Indicator label="RSI (21)" value={a.rsi21} tone={indicatorTone("rsi21", a, price)} />
+        <Indicator
+          label="MACD"
+          value={a.macd}
+          format={(v) => (v == null ? "-" : Number(v).toFixed(3))}
+          tone={indicatorTone("macd", a, price)}
+        />
+        <Indicator label="ADX (14)" value={a.adx} tone={indicatorTone("adx", a, price)} />
+        <Indicator
+          label="BB %B"
+          value={a.pctB}
+          format={(v) => (v == null ? "-" : Number(v).toFixed(0))}
+          tone={indicatorTone("pctB", a, price)}
+        />
+        <Indicator label="VWAP 20" value={a.vwap} tone={indicatorTone("vwap", a, price)} />
       </div>
 
       <div className={"signal " + sig.label.toLowerCase()}>{sig.label}</div>
       <div style={{ marginTop: 12, fontSize: "0.8rem", color: "var(--muted)" }}>
-	{sig.reasons.slice(0, 4).map((r, i) => (<div key={i}>- {r}</div>))}
+        {sig.reasons.slice(0, 4).map((r, i) => (
+          <div key={i}>- {r}</div>
+        ))}
       </div>
     </div>
   );
@@ -889,9 +957,9 @@ function App() {
     if (sym === "SPY") { setSymbolError("SPY is already shown on the left - pick another symbol."); return; }
     setSymbolLoading(true);
     setSymbolError(null);
-    const SYMBOL_TIMEOUT_MS = 10000;
+    const SYMBOL_TIMEOUT_MS = 7000;
     try {
-      // Cap wait at 10s so invalid / missing symbols fail quickly
+      // Cap wait at 7s so invalid / missing symbols fail quickly
       const data = await Promise.race([
         fetchYahooChart(sym),
         new Promise(function (_, reject) {
@@ -908,6 +976,10 @@ function App() {
       setLastUpdated(new Date());
     } catch (err) {
       setSymbolError(sym + ": " + ((err && err.message) || "failed"));
+      // Auto-clear error message after 2 seconds
+      setTimeout(function () {
+        setSymbolError(null);
+      }, 2000);
     } finally { setSymbolLoading(false); }
   };
 
@@ -1027,9 +1099,6 @@ function App() {
                     }
                     theme={theme}
                   />
-                </div>
-                <div className="score" style={{ marginTop: 4 }}>
-                  VIX — last 6 months
                 </div>
               </div>
               <FearGreedPanel data={fgData} loading={fgLoading} error={fgError} theme={theme} />
