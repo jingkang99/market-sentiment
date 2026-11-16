@@ -32,4 +32,11 @@ npm install
 PORT=3000 HOST=0.0.0.0 npm start --loglevel verbose
 ```
 
+## Build Executable
+
+```
+npm run build
+npx pkg . --targets node18-win-x64 --out-path dist
+```
+
 <img width="1107" height="968" alt="image" src="https://github.com/user-attachments/assets/509828c5-f35e-48d1-b5dc-a418fd80d838" />
