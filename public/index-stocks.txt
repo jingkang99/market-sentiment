@@ -1,0 +1,33 @@
+# Market Indices panel (max 220 symbols)
+# One symbol per line (or comma/space separated). Lines starting with # are ignored.
+# First symbol is always treated as VIX (^VIX). Extra symbols beyond 220 are ignored.
+# Rows display up to 11 symbols each.
+^VIX
+^GSPC
+^DJI
+^IXIC
+^NDX
+^RUT
+^NYA
+^XAX
+^SOX
+^MID
+^OEX
+# add commodities
+GC=F
+CL=F
+^TNX
+^TYX
+CNY=X
+JPY=X
+EUR=X
+GLD
+SLV
+BTC=F
+ETH=F
+000001.SS
+^HSI
+^N225
+^KS11
+^TWII
+DX-Y

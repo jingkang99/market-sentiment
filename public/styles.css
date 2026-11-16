@@ -38,6 +38,17 @@
   --breadth-mixed-bg: #f5efe3;
   --breadth-mixed-fg: #7a5c2e;
   --breadth-loading-bg: var(--panel-2);
+  /* VIX level colors (dark theme) */
+  --vix-green-bg: #dcfce7;
+  --vix-green-fg: #166534;
+  --vix-blue-bg: #dbeafe;
+  --vix-blue-fg: #1e40af;
+  --vix-amber-bg: #fef3c7;
+  --vix-amber-fg: #92400e;
+  --vix-orange-bg: #ffedd5;
+  --vix-orange-fg: #9a3412;
+  --vix-red-bg: #fee2e2;
+  --vix-red-fg: #991b1b;
 }
 
 /* Soft light theme — easy on the eyes */
@@ -78,6 +89,17 @@
   --breadth-mixed-bg: #f7f0e4;
   --breadth-mixed-fg: #8a6420;
   --breadth-loading-bg: #eef1f6;
+  /* VIX level colors (light theme) */
+  --vix-green-bg: #dcfce7;
+  --vix-green-fg: #166534;
+  --vix-blue-bg: #dbeafe;
+  --vix-blue-fg: #1e40af;
+  --vix-amber-bg: #fef3c7;
+  --vix-amber-fg: #92400e;
+  --vix-orange-bg: #ffedd5;
+  --vix-orange-fg: #9a3412;
+  --vix-red-bg: #fee2e2;
+  --vix-red-fg: #991b1b;
 }
 
 *,
@@ -280,14 +302,85 @@ header p {
   margin-bottom: 12px;
 }
 
-/* Overall bias */
+/* Overall bias + Fear & Greed split */
 .overall {
+  position: relative;
   text-align: center;
   padding: 16px 18px;
   margin-bottom: 16px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
+}
+.overall-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: stretch;
+}
+@media (max-width: 820px) {
+  .overall-split {
+    grid-template-columns: 1fr;
+  }
+}
+.overall-left,
+.overall-right {
+  text-align: center;
+  min-width: 0;
+}
+.overall-right {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* Section show/hide toggle (upper-right corner) */
+.section-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 2;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.section-toggle:hover {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--hover-border);
+}
+.section-collapsed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.overall-split.section-collapsed {
+  display: flex;
+  grid-template-columns: none;
+}
+.section-collapsed-label {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 560;
+  letter-spacing: 0.03em;
+  text-align: center;
+  width: 100%;
+  padding: 0 40px; /* equal sides so title sits visually centered next to the toggle */
 }
 .overall h2 {
   margin: 0 0 8px;
@@ -310,6 +403,29 @@ header p {
   color: var(--muted);
   font-size: 0.88rem;
 }
+
+/* CNN Fear & Greed — title/rating/score reuse .overall h2, .sentiment, .score */
+.overall-right .sentiment {
+  text-transform: capitalize; /* CNN ratings are multi-word (e.g. extreme fear) */
+}
+.fg-chart-wrap {
+  width: 100%;
+  height: 140px;
+  position: relative;
+  margin-top: 8px;
+}
+.fg-chart-wrap svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.fg-loading,
+.fg-error {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 24px 8px;
+}
+.fg-error { color: var(--error-text); }
 
 /* Market breadth — same panel style as Overall Market Bias */
 .overall.breadth {
@@ -438,6 +554,67 @@ header p {
   background: var(--breadth-loading-bg);
   color: var(--muted);
   border-color: var(--border);
+}
+
+/* Index panel (above Market Breadth, no title) */
+.overall.indices {
+  text-align: center;
+  margin-bottom: 12px;
+}
+.indices-grid {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.indices-grid:last-child {
+  margin-bottom: 0;
+}
+@media (max-width: 1100px) {
+  .indices-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .indices-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.breadth-change {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.2;
+  margin-bottom: 1px;
+}
+.breadth-change.positive { color: var(--up); }
+.breadth-change.negative { color: var(--down); }
+
+/* VIX-specific square colors */
+.breadth-vix-green {
+  background: var(--vix-green-bg);
+  color: var(--vix-green-fg);
+  border-color: rgba(22, 101, 52, 0.18);
+}
+.breadth-vix-blue {
+  background: var(--vix-blue-bg);
+  color: var(--vix-blue-fg);
+  border-color: rgba(30, 64, 175, 0.18);
+}
+.breadth-vix-amber {
+  background: var(--vix-amber-bg);
+  color: var(--vix-amber-fg);
+  border-color: rgba(146, 64, 14, 0.18);
+}
+.breadth-vix-orange {
+  background: var(--vix-orange-bg);
+  color: var(--vix-orange-fg);
+  border-color: rgba(154, 52, 18, 0.18);
+}
+.breadth-vix-red {
+  background: var(--vix-red-bg);
+  color: var(--vix-red-fg);
+  border-color: rgba(153, 27, 27, 0.2);
 }
 
 /* Stock cards */

@@ -315,6 +315,87 @@ app.get(
   })
 );
 
+/* CNN Fear & Greed Index (proxied to avoid CORS / bot blocks) */
+const FG_URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata";
+const FG_CACHE_TTL = 5 * 60 * 1000; // 5 min
+let fgCache = { at: 0, data: null };
+
+async function fetchFearGreed() {
+  const now = Date.now();
+  if (fgCache.data && now - fgCache.at < FG_CACHE_TTL) return fgCache.data;
+
+  const url = FG_URL;
+  let raw;
+  if (typeof fetch === "function") {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    try {
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        headers: {
+          "User-Agent": USER_AGENT,
+          Accept: "application/json",
+          Referer: "https://www.cnn.com/",
+          Origin: "https://www.cnn.com",
+        },
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      raw = await res.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  } else {
+    raw = await new Promise((resolve, reject) => {
+      const lib = https;
+      const req = lib.get(
+        url,
+        {
+          headers: {
+            "User-Agent": USER_AGENT,
+            Accept: "application/json",
+            Referer: "https://www.cnn.com/",
+            Origin: "https://www.cnn.com",
+          },
+          timeout: 15000,
+        },
+        (res) => {
+          let body = "";
+          res.setEncoding("utf8");
+          res.on("data", (c) => (body += c));
+          res.on("end", () => {
+            if (res.statusCode !== 200) return reject(new Error("HTTP " + res.statusCode));
+            try {
+              resolve(JSON.parse(body));
+            } catch {
+              reject(new Error("Invalid JSON from CNN"));
+            }
+          });
+        }
+      );
+      req.on("timeout", () => req.destroy(new Error("CNN request timed out")));
+      req.on("error", reject);
+    });
+  }
+
+  if (!raw || !raw.fear_and_greed) throw new Error("Unexpected CNN Fear & Greed payload");
+  fgCache = { at: now, data: raw };
+  return raw;
+}
+
+app.get(
+  "/api/fear-greed",
+  wrap(async (_req, res) => {
+    try {
+      const data = await fetchFearGreed();
+      res.set("Cache-Control", "public, max-age=60");
+      res.json(data);
+    } catch (err) {
+      console.error("[api] fear-greed failed:", err.message);
+      res.status(502).json({ error: err.message || "Failed to load CNN Fear & Greed" });
+    }
+  })
+);
+
 // Fresh bundle (rebuilt automatically whenever app.jsx changes)
 app.get("/app.js", (req, res, next) => {
   try {

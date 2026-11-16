@@ -169,6 +169,230 @@ async function fetchYahooChart(symbol) {
   }
 }
 
+/* ---------- CNN Fear & Greed ---------- */
+
+function ratingClass(rating) {
+  return String(rating || "neutral")
+    .toLowerCase()
+    .replace(/\s+/g, "-");
+}
+
+/** Shared sparkline used by CNN Fear & Greed and VIX panels */
+function SparkLineChart({ points, theme, yMin, yMax, yTicks, rightLabels, ariaLabel }) {
+  const w = 520;
+  const h = 140;
+  const padL = 36;
+  const padR = rightLabels && rightLabels.length ? 78 : 14;
+  const padT = 14;
+  const padB = 22;
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
+
+  if (!points || points.length < 2) {
+    return <div className="fg-loading">Loading chart…</div>;
+  }
+
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const minX = Math.min.apply(null, xs);
+  const maxX = Math.max.apply(null, xs);
+  let minY = yMin != null ? yMin : Math.min.apply(null, ys);
+  let maxY = yMax != null ? yMax : Math.max.apply(null, ys);
+  if (minY === maxY) {
+    minY -= 1;
+    maxY += 1;
+  }
+  // small padding when auto-scaling
+  if (yMin == null || yMax == null) {
+    const pad = (maxY - minY) * 0.08;
+    minY -= pad;
+    maxY += pad;
+  }
+
+  const xScale = (x) => padL + ((x - minX) / (maxX - minX || 1)) * innerW;
+  const yScale = (y) => padT + (1 - (y - minY) / (maxY - minY || 1)) * innerH;
+
+  let d = "";
+  for (let i = 0; i < points.length; i++) {
+    const px = xScale(points[i].x);
+    const py = yScale(points[i].y);
+    d += (i === 0 ? "M" : "L") + px.toFixed(1) + "," + py.toFixed(1);
+  }
+
+  const monthLabels = [];
+  const seenMonth = {};
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const dt = new Date(p.x);
+    const key = dt.getFullYear() + "-" + dt.getMonth();
+    if (seenMonth[key]) continue;
+    seenMonth[key] = true;
+    const label =
+      dt.toLocaleString("en-US", { month: "short" }) +
+      (dt.getMonth() === 0 ? " " + dt.getFullYear() : "");
+    monthLabels.push({ x: p.x, label: label });
+  }
+  const step = Math.max(1, Math.ceil(monthLabels.length / 5));
+  const ticks = monthLabels.filter(function (_, i) {
+    return i % step === 0 || i === monthLabels.length - 1;
+  });
+
+  const tickVals =
+    yTicks ||
+    (function () {
+      const out = [];
+      const n = 4;
+      for (let i = 0; i <= n; i++) out.push(minY + ((maxY - minY) * i) / n);
+      return out;
+    })();
+
+  const lineColor = theme === "light" ? "#2563eb" : "#60a5fa";
+  const gridColor = theme === "light" ? "rgba(100,116,139,0.25)" : "rgba(148,163,184,0.22)";
+  const labelColor = theme === "light" ? "#64748b" : "#8b94a7";
+
+  return (
+    <svg viewBox={"0 0 " + w + " " + h} preserveAspectRatio="none" aria-label={ariaLabel || "chart"}>
+      {tickVals.map(function (gy, i) {
+        return (
+          <line
+            key={"g" + i}
+            x1={padL}
+            x2={w - padR}
+            y1={yScale(gy)}
+            y2={yScale(gy)}
+            stroke={gridColor}
+            strokeDasharray="3 3"
+            strokeWidth="1"
+          />
+        );
+      })}
+      {tickVals.map(function (gy, i) {
+        const label =
+          Math.abs(gy) >= 10 || gy === 0 ? Math.round(gy) : Number(gy).toFixed(1);
+        return (
+          <text key={"yl" + i} x={padL - 6} y={yScale(gy) + 3} fontSize="9" fill={labelColor} textAnchor="end">
+            {label}
+          </text>
+        );
+      })}
+      {rightLabels &&
+        rightLabels.map(function (rl, i) {
+          return (
+            <text
+              key={"rl" + i}
+              x={w - padR + 6}
+              y={yScale(rl.y) + 3}
+              fontSize="9"
+              fill={labelColor}
+              textAnchor="start"
+            >
+              {rl.label}
+            </text>
+          );
+        })}
+      <path d={d} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      {ticks.map(function (t, i) {
+        return (
+          <text key={"xl" + i} x={xScale(t.x)} y={h - 6} fontSize="9" fill={labelColor} textAnchor="middle">
+            {t.label}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
+function FearGreedChart({ points, theme }) {
+  return (
+    <SparkLineChart
+      points={points}
+      theme={theme}
+      yMin={0}
+      yMax={100}
+      yTicks={[0, 25, 50, 75, 100]}
+      rightLabels={[
+        { y: 75, label: "Extreme Greed" },
+        { y: 25, label: "Extreme Fear" },
+      ]}
+      ariaLabel="CNN Fear and Greed last 6 months"
+    />
+  );
+}
+
+function VixChart({ bars, theme }) {
+  const sixMonthsAgo = Date.now() - 183 * 24 * 60 * 60 * 1000;
+  let points = (bars || [])
+    .filter(function (b) {
+      return b && typeof b.t === "number" && typeof b.c === "number" && b.t >= sixMonthsAgo;
+    })
+    .map(function (b) {
+      return { x: b.t, y: b.c };
+    });
+  if (points.length < 10 && bars && bars.length) {
+    points = bars.slice(-130).map(function (b) {
+      return { x: b.t, y: b.c };
+    });
+  }
+  return (
+    <SparkLineChart
+      points={points}
+      theme={theme}
+      yTicks={null}
+      ariaLabel="VIX last 6 months"
+    />
+  );
+}
+
+function FearGreedPanel({ data, loading, error, theme }) {
+  const current = data && data.fear_and_greed;
+  const hist = data && data.fear_and_greed_historical && data.fear_and_greed_historical.data;
+
+  const sixMonthsAgo = Date.now() - 183 * 24 * 60 * 60 * 1000;
+  let points = (hist || [])
+    .filter(function (p) {
+      return typeof p.x === "number" && typeof p.y === "number" && p.x >= sixMonthsAgo;
+    })
+    .map(function (p) {
+      return { x: p.x, y: p.y, rating: p.rating };
+    });
+  if (points.length < 10) {
+    points = (hist || []).slice(-130).map(function (p) {
+      return { x: p.x, y: p.y, rating: p.rating };
+    });
+  }
+
+  const rating = current ? current.rating : null;
+  const score = current ? current.score : null;
+
+  // Map CNN rating → same sentiment color classes used on the left
+  let sentClass = "neutral";
+  const r = String(rating || "").toLowerCase();
+  if (r.indexOf("greed") >= 0) sentClass = "bullish";
+  else if (r.indexOf("fear") >= 0) sentClass = "bearish";
+
+  return (
+    <div className="overall-right">
+      <h2>CNN Fear &amp; Greed Index</h2>
+      {loading && !current && <div className="fg-loading">Loading…</div>}
+      {error && !current && <div className="fg-error">{error}</div>}
+      {current && (
+        <>
+          <div className={"sentiment " + sentClass}>{rating}</div>
+          <div className="score">
+            Score: {Number(score).toFixed(1)}
+            {current.previous_close != null
+              ? " (prev close " + Number(current.previous_close).toFixed(1) + ")"
+              : ""}
+          </div>
+          <div className="fg-chart-wrap">
+            <FearGreedChart points={points} theme={theme} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ---------- cards ---------- */
 
 function Indicator(props) {
@@ -276,6 +500,62 @@ async function loadBreadthWatchlist() {
   }
 }
 
+/* ---------- market indices panel (above Market Breadth) ---------- */
+
+function parseIndexList(text) {
+  const out = [];
+  const seen = new Set();
+  const lines = String(text || "").split(/\r?\n/);
+  for (const raw of lines) {
+    const line = raw.replace(/#.*$/, "").trim().toUpperCase();
+    if (!line) continue;
+    const parts = line.split(/[\s,;]+/).filter(Boolean);
+    for (const p of parts) {
+      // normalize common VIX aliases
+      let sym = p;
+      if (sym === "VI" || sym === "VIX") sym = "^VIX";
+      if (!/^[A-Z0-9.^=]{1,15}$/.test(sym)) continue;
+      if (seen.has(sym)) continue;
+      seen.add(sym);
+      out.push(sym);
+      if (out.length >= 220) break;
+    }
+    if (out.length >= 220) break;
+  }
+  // First symbol is always VIX
+  const vixIdx = out.findIndex((s) => s === "^VIX" || s === "VIX");
+  if (vixIdx === -1) {
+    out.unshift("^VIX");
+  } else if (vixIdx > 0) {
+    out.splice(vixIdx, 1);
+    out.unshift("^VIX");
+  } else {
+    out[0] = "^VIX";
+  }
+  // final dedupe after possible prepend
+  const final = [];
+  const seen2 = new Set();
+  for (const s of out) {
+    if (seen2.has(s)) continue;
+    seen2.add(s);
+    final.push(s);
+    if (final.length >= 220) break;
+  }
+  return final;
+}
+
+async function loadIndexWatchlist() {
+  try {
+    const res = await fetch("/index-stocks.txt?ts=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    return parseIndexList(text);
+  } catch (e) {
+    console.warn("[indices] could not load index-stocks.txt:", e && e.message);
+    return ["^VIX"];
+  }
+}
+
 function BreadthTile({ data, symbol, tip }) {
   const sym = (data && data.symbol) || symbol;
   const tipText = tip || SECTOR_NAMES[sym] || (data && data.name) || sym;
@@ -314,28 +594,145 @@ function BreadthTile({ data, symbol, tip }) {
   );
 }
 
-function MarketBreadth({ sectors, watchlist, watchData }) {
+function SectionToggle({ open, onToggle, label }) {
+  return (
+    <button
+      type="button"
+      className="section-toggle"
+      onClick={onToggle}
+      title={open ? "Hide " + label : "Show " + label}
+      aria-label={open ? "Hide " + label : "Show " + label}
+      aria-expanded={open}
+    >
+      {open ? "−" : "+"}
+    </button>
+  );
+}
+
+function MarketBreadth({ sectors, watchlist, watchData, open, onToggle }) {
   const custom = (watchlist || []).slice(0, 11);
   return (
-    <div className="overall breadth">
-      <h2>Market Breadth</h2>
-      <p className="breadth-sub">Price vs 21-day EMA and 200-day EMA</p>
-      <div className="breadth-grid">
-        {SECTOR_SYMBOLS.map((sym) => (
-          <BreadthTile key={sym} symbol={sym} data={sectors[sym] || null} tip={SECTOR_NAMES[sym]} />
-        ))}
+    <div className={"overall breadth" + (open ? "" : " section-collapsed")}>
+      <SectionToggle open={open} onToggle={onToggle} label="Market Breadth" />
+      {open ? (
+        <>
+          <h2>Market Breadth</h2>
+          <div className="breadth-grid">
+            {SECTOR_SYMBOLS.map((sym) => (
+              <BreadthTile key={sym} symbol={sym} data={sectors[sym] || null} tip={SECTOR_NAMES[sym]} />
+            ))}
+          </div>
+          {custom.length > 0 && (
+            <div className="breadth-grid breadth-grid-custom">
+              {custom.map((sym) => (
+                <BreadthTile
+                  key={"w-" + sym}
+                  symbol={sym}
+                  data={(watchData && watchData[sym]) || null}
+                  tip={(watchData && watchData[sym] && watchData[sym].name) || sym}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="section-collapsed-label">Market Breadth</div>
+      )}
+    </div>
+  );
+}
+
+function vixTone(price) {
+  if (price == null || !Number.isFinite(price)) return "loading";
+  if (price < 20) return "vix-green";
+  if (price < 25) return "vix-blue";
+  if (price < 30) return "vix-amber";
+  if (price < 50) return "vix-orange";
+  return "vix-red";
+}
+
+function isVixSymbol(sym) {
+  const s = String(sym || "").toUpperCase().replace(/^\^/, "");
+  return s === "VIX" || s === "VI";
+}
+
+function IndexTile({ data, symbol }) {
+  const sym = (data && data.symbol) || symbol;
+  const displaySym = isVixSymbol(sym) ? "VIX" : String(sym || "").replace(/^\^/, "");
+  const tipText = (data && data.name) || displaySym;
+
+  if (!data) {
+    return (
+      <div className="breadth-tile breadth-loading">
+        <div className="breadth-sym" data-tip={tipText}>{displaySym}</div>
+        <div className="breadth-price">…</div>
       </div>
-      {custom.length > 0 && (
-        <div className="breadth-grid breadth-grid-custom">
-          {custom.map((sym) => (
-            <BreadthTile
-              key={"w-" + sym}
-              symbol={sym}
-              data={(watchData && watchData[sym]) || null}
-              tip={(watchData && watchData[sym] && watchData[sym].name) || sym}
-            />
+    );
+  }
+
+  const a = analyze(data.bars || []);
+  const price = data.price;
+  const change = data.change;
+  const above21 = a.ema21 != null && price != null && price > a.ema21;
+
+  let tone;
+  if (isVixSymbol(sym)) {
+    tone = vixTone(price);
+  } else {
+    // same bull/bear/mixed logic as Market Breadth, driven by 21EMA only for visual consistency with the single flag
+    tone = above21 ? "bull" : "bear";
+  }
+
+  const changeStr =
+    change == null || !Number.isFinite(change)
+      ? "—"
+      : (change >= 0 ? "+" : "") + Number(change).toFixed(2);
+
+  return (
+    <div className={"breadth-tile breadth-" + tone}>
+      <div className="breadth-sym" data-tip={tipText}>{displaySym}</div>
+      <div className="breadth-price">
+        {price != null ? Number(price).toFixed(2) : "—"}
+      </div>
+      <div className={"breadth-change " + (change >= 0 ? "positive" : "negative")}>
+        {changeStr}
+      </div>
+      <div className="breadth-flags">
+        <span className={above21 ? "flag-up" : "flag-down"}>
+          {above21 ? "↑" : "↓"} 21E
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MarketIndices({ symbols, data, open, onToggle }) {
+  const list = symbols || [];
+  if (list.length === 0 && open) return null;
+  const rows = [];
+  for (let i = 0; i < list.length; i += 11) {
+    rows.push(list.slice(i, i + 11));
+  }
+  return (
+    <div className={"overall indices" + (open ? "" : " section-collapsed")}>
+      <SectionToggle open={open} onToggle={onToggle} label="Market Indices" />
+      {open ? (
+        <>
+          <h2>Market Indices</h2>
+          {rows.map((row, ri) => (
+            <div className="indices-grid" key={"idx-row-" + ri}>
+              {row.map((sym) => (
+                <IndexTile
+                  key={"idx-" + sym}
+                  symbol={sym}
+                  data={(data && data[sym]) || null}
+                />
+              ))}
+            </div>
           ))}
-        </div>
+        </>
+      ) : (
+        <div className="section-collapsed-label">Market Indices</div>
       )}
     </div>
   );
@@ -351,6 +748,14 @@ function App() {
   const [sectors, setSectors] = useState({});
   const [watchlist, setWatchlist] = useState([]);
   const [watchData, setWatchData] = useState({});
+  const [indexList, setIndexList] = useState([]);
+  const [indexData, setIndexData] = useState({});
+  const [fgData, setFgData] = useState(null);
+  const [fgLoading, setFgLoading] = useState(false);
+  const [fgError, setFgError] = useState(null);
+  const [showOverall, setShowOverall] = useState(true);
+  const [showIndices, setShowIndices] = useState(true);
+  const [showBreadth, setShowBreadth] = useState(true);
   const [symbol, setSymbol] = useState(() => {
     try { return localStorage.getItem("ms.symbol") || "QQQ"; } catch (e) { return "QQQ"; }
   });
@@ -389,14 +794,18 @@ function App() {
     try {
       const list = await loadBreadthWatchlist();
       setWatchlist(list);
+      const idxList = await loadIndexWatchlist();
+      setIndexList(idxList);
 
       const sectorFetches = SECTOR_SYMBOLS.map((sym) => fetchYahooChart(sym));
       const watchFetches = list.map((sym) => fetchYahooChart(sym));
+      const indexFetches = idxList.map((sym) => fetchYahooChart(sym));
       const results = await Promise.allSettled([
         fetchYahooChart("SPY"),
         fetchYahooChart(symbol),
         ...sectorFetches,
         ...watchFetches,
+        ...indexFetches,
       ]);
       const s = results[0];
       const o = results[1];
@@ -432,6 +841,32 @@ function App() {
       });
       setWatchData(nextWatch);
 
+      const nextIndex = {};
+      const indexOffset = watchOffset + list.length;
+      idxList.forEach((sym, i) => {
+        const r = results[indexOffset + i];
+        if (r && r.status === "fulfilled") {
+          nextIndex[sym] = r.value;
+          hasData = true;
+        } else {
+          console.error(sym + " failed:", r && r.reason);
+        }
+      });
+      setIndexData(nextIndex);
+
+      // CNN Fear & Greed (best-effort; does not block main market data)
+      setFgLoading(true);
+      setFgError(null);
+      try {
+        const fgRes = await fetchJSON("/api/fear-greed", 12000);
+        setFgData(fgRes);
+      } catch (fgErr) {
+        console.warn("[fear-greed]", fgErr && fgErr.message);
+        setFgError((fgErr && fgErr.message) || "Fear & Greed unavailable");
+      } finally {
+        setFgLoading(false);
+      }
+
       if (hasData) setLastUpdated(new Date());
       if (errs.length) setError(errs.join(" | ") + (hasData ? " (partial data shown)" : " - is the local server running? Try: npm start"));
     } catch (e) {
@@ -454,8 +889,17 @@ function App() {
     if (sym === "SPY") { setSymbolError("SPY is already shown on the left - pick another symbol."); return; }
     setSymbolLoading(true);
     setSymbolError(null);
+    const SYMBOL_TIMEOUT_MS = 10000;
     try {
-      const data = await fetchYahooChart(sym);
+      // Cap wait at 10s so invalid / missing symbols fail quickly
+      const data = await Promise.race([
+        fetchYahooChart(sym),
+        new Promise(function (_, reject) {
+          setTimeout(function () {
+            reject(new Error("Request timed out after " + SYMBOL_TIMEOUT_MS / 1000 + "s — symbol may not exist"));
+          }, SYMBOL_TIMEOUT_MS);
+        }),
+      ]);
       setSymbol(sym);
       setOther(data);
       try { localStorage.setItem("ms.symbol", sym); } catch (e) {}
@@ -559,15 +1003,57 @@ function App() {
       {error && <div className="error">{error}</div>}
       {lastUpdated && <div className="status">Last updated: {lastUpdated.toLocaleString()}</div>}
 
-      {(spy || other) && (
-        <div className="overall">
-          <h2>Overall Market Bias</h2>
-          <div className={"sentiment " + overallLabel.toLowerCase()}>{overallLabel}</div>
-          <div className="score">Composite score: {overallScore.toFixed(2)} (SPY + {symbol})</div>
+      {(spy || other || fgData || fgLoading || !showOverall) && (
+        <div className={"overall overall-split" + (showOverall ? "" : " section-collapsed")}>
+          <SectionToggle
+            open={showOverall}
+            onToggle={() => setShowOverall((v) => !v)}
+            label="Overall Market Bias"
+          />
+          {showOverall ? (
+            <>
+              <div className="overall-left">
+                <h2>Overall Market Bias</h2>
+                <div className={"sentiment " + overallLabel.toLowerCase()}>{overallLabel}</div>
+                <div className="score">
+                  Composite score: {overallScore.toFixed(2)} (SPY + {symbol})
+                </div>
+                <div className="fg-chart-wrap">
+                  <VixChart
+                    bars={
+                      (indexData && indexData["^VIX"] && indexData["^VIX"].bars) ||
+                      (indexData && indexData["VIX"] && indexData["VIX"].bars) ||
+                      []
+                    }
+                    theme={theme}
+                  />
+                </div>
+                <div className="score" style={{ marginTop: 4 }}>
+                  VIX — last 6 months
+                </div>
+              </div>
+              <FearGreedPanel data={fgData} loading={fgLoading} error={fgError} theme={theme} />
+            </>
+          ) : (
+            <div className="section-collapsed-label">Overall Market Bias / Fear &amp; Greed</div>
+          )}
         </div>
       )}
 
-      <MarketBreadth sectors={sectors} watchlist={watchlist} watchData={watchData} />
+      <MarketIndices
+        symbols={indexList}
+        data={indexData}
+        open={showIndices}
+        onToggle={() => setShowIndices((v) => !v)}
+      />
+
+      <MarketBreadth
+        sectors={sectors}
+        watchlist={watchlist}
+        watchData={watchData}
+        open={showBreadth}
+        onToggle={() => setShowBreadth((v) => !v)}
+      />
 
       <div className="cards">
         <StockCard data={spy} />
