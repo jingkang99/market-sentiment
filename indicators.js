@@ -230,6 +230,7 @@ export function analyze(bars) {
   const closes = list.map((b) => b.c);
   const volumes = list.map((b) => b.v || 0);
 
+  const sma10 = smaSeries(closes, 10);
   const sma20 = smaSeries(closes, 20);
   const sma50 = smaSeries(closes, 50);
   const ema21 = emaSeries(closes, 21);
@@ -244,6 +245,7 @@ export function analyze(bars) {
 
   const enriched = list.map((b, i) => ({
     ...b,
+    sma10: sma10[i],
     sma20: sma20[i],
     sma50: sma50[i],
     ema21: ema21[i],
@@ -268,6 +270,7 @@ export function analyze(bars) {
   return {
     closes,
     enriched,
+    sma10: last(sma10),
     sma20: last(sma20),
     sma50: last(sma50),
     ema21: last(ema21),

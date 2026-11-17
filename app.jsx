@@ -1002,7 +1002,7 @@ function App() {
 
   const legend = (extra) => (
     <div className="chart-legend">
-      <span style={{ color: C.sma20 }}><i style={{ background: C.sma20 }} />SMA20</span>
+      <span style={{ color: C.sma10 }}><i style={{ background: C.sma10 }} />SMA10</span>
       <span style={{ color: C.sma50 }}><i style={{ background: C.sma50 }} />SMA50</span>
       <span style={{ color: C.ema21 }}><i style={{ background: C.ema21 }} />EMA21</span>
       <span style={{ color: C.rsi }}><i style={{ background: C.rsi }} />RSI14</span>
@@ -1179,7 +1179,7 @@ function App() {
               <span style={{ color: C.bb }}><i style={{ background: C.bb }} />BB 20/2s</span>
               <span style={{ color: C.vwap }}><i style={{ background: C.vwap }} />VWAP 20</span>
               <span style={{ color: C.ema21 }}><i style={{ background: C.ema21 }} />EMA21</span>
-              <span style={{ color: C.sma20 }}><i style={{ background: C.sma20 }} />SMA20</span>
+              <span style={{ color: C.sma10 }}><i style={{ background: C.sma10 }} />SMA10</span>
             </div>
           )}
           expanded={expandedChart === "spy-bands"}
@@ -1206,7 +1206,7 @@ function App() {
               <span style={{ color: C.bb }}><i style={{ background: C.bb }} />BB 20/2s</span>
               <span style={{ color: C.vwap }}><i style={{ background: C.vwap }} />VWAP 20</span>
               <span style={{ color: C.ema21 }}><i style={{ background: C.ema21 }} />EMA21</span>
-              <span style={{ color: C.sma20 }}><i style={{ background: C.sma20 }} />SMA20</span>
+              <span style={{ color: C.sma10 }}><i style={{ background: C.sma10 }} />SMA10</span>
             </div>
           )}
           expanded={expandedChart === "other-bands"}

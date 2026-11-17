@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 
-export const CHART_VERSION = "c8-adx"; // bump to bust the browser cache
+export const CHART_VERSION = "c9-sma10"; // bump to bust the browser cache
 console.log("[charts] build", CHART_VERSION);
 
 const DARK = {
   up: "#22c55e",
   down: "#ef4444",
+  sma10: "#3b82f6",
   sma20: "#3b82f6",
   sma50: "#f59e0b",
   ema21: "#34d399",
@@ -39,6 +40,7 @@ const DARK = {
 const LIGHT = {
   up: "#16a34a",
   down: "#dc2626",
+  sma10: "#2563eb",
   sma20: "#2563eb",
   sma50: "#d97706",
   ema21: "#059669",
@@ -171,8 +173,8 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
         min = Math.min(min, b.c, b.bbL ?? b.c, b.vwap ?? b.c);
         max = Math.max(max, b.c, b.bbU ?? b.c, b.vwap ?? b.c);
       } else {
-        min = Math.min(min, b.l, b.sma20 ?? b.l, b.sma50 ?? b.l, b.ema21 ?? b.l);
-        max = Math.max(max, b.h, b.sma20 ?? b.h, b.sma50 ?? b.h, b.ema21 ?? b.h);
+        min = Math.min(min, b.l, b.sma10 ?? b.l, b.sma50 ?? b.l, b.ema21 ?? b.l);
+        max = Math.max(max, b.h, b.sma10 ?? b.h, b.sma50 ?? b.h, b.ema21 ?? b.h);
       }
       maxVol = Math.max(maxVol, b.v || 0, b.volSma21 || 0);
       if (b.macd != null) macdAbs = Math.max(macdAbs, Math.abs(b.macd));
@@ -249,7 +251,7 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
       lineOn("bbU", C.bb, 1.3, [5, 4], yPrice);
       lineOn("bbL", C.bb, 1.3, [5, 4], yPrice);
       lineOn("bbM", C.bb, 1.1, [2, 3], yPrice);
-      lineOn("sma20", C.sma20, 1.2, [], yPrice);
+      lineOn("sma10", C.sma10, 1.2, [], yPrice);
       lineOn("vwap", C.vwap, 1.5, [], yPrice);
       lineOn("ema21", C.ema21, 1.2, [6, 3], yPrice);
       ctx.strokeStyle = C.text;
@@ -278,7 +280,7 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
         ctx.fillRect(xAt(i) - bw / 2, Math.min(yo, yc), bw, Math.max(1, Math.abs(yc - yo)));
       }
       lineOn("sma50", C.sma50, 1.6, [], yPrice);
-      lineOn("sma20", C.sma20, 1.6, [], yPrice);
+      lineOn("sma10", C.sma10, 1.6, [], yPrice);
       lineOn("ema21", C.ema21, 1.4, [6, 3], yPrice);
     }
 
@@ -541,7 +543,7 @@ export function PriceChart({ bars = [], months = 6, height = 470, variant = "can
                 <span style={{ color: C.volSma }}>SMA21 {hb.volSma21 != null ? ((hb.volSma21) / 1e6).toFixed(2) + "M" : "—"}</span>
               </div>
               <div>
-                <span style={{ color: C.sma20 }}>SMA20 {fmt(hb.sma20)}</span>{" "}
+                <span style={{ color: C.sma10 }}>SMA10 {fmt(hb.sma10)}</span>{" "}
                 <span style={{ color: C.sma50 }}>SMA50 {fmt(hb.sma50)}</span>
               </div>
               <div><span style={{ color: C.ema21 }}>EMA21 {fmt(hb.ema21)}</span></div>
