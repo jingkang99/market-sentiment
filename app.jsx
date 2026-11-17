@@ -1226,7 +1226,6 @@ function App() {
         </ChartCard>
       </div>
 
-      <footer>Built with React + Express - technical analysis is not a guarantee of future performance</footer>
     </div>
   );
 }
