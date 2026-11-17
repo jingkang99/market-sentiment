@@ -108,6 +108,14 @@
   box-sizing: border-box;
 }
 
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 html,
 body {
   margin: 0;
@@ -121,11 +129,37 @@ body {
   transition: background 0.2s ease, color 0.2s ease;
 }
 
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  /* Allow vertical scroll only — blocks sideways finger pan */
+  touch-action: pan-y;
+  overscroll-behavior-x: none;
+  position: relative;
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  min-width: 0;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
 .container {
   max-width: 1120px;
   width: 100%;
+  min-width: 0;
   margin: 0 auto;
   padding: 16px 18px 40px;
+  overflow-x: hidden;
 }
 
 header {
@@ -917,5 +951,88 @@ footer {
 @media (min-width: 1400px) {
   .container {
     max-width: 1120px;
+  }
+}
+
+/* ---- Phone / iPad: fit width, no horizontal pan ---- */
+@media (max-width: 900px) {
+  .container {
+    padding: 12px 12px 32px;
+  }
+  header h1 {
+    font-size: 1.28rem;
+  }
+  header p {
+    font-size: 0.85rem;
+  }
+  .controls {
+    padding: 8px 10px;
+  }
+  .range-tabs {
+    margin-left: 0;
+  }
+  .overall {
+    padding: 12px 12px;
+  }
+  .breadth-tile {
+    min-height: 70px;
+    padding: 8px 4px 7px;
+  }
+  .breadth-sym {
+    font-size: 0.8rem;
+  }
+  .breadth-price {
+    font-size: 0.7rem;
+  }
+  .card {
+    padding: 10px 12px 12px;
+  }
+  .indicators {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+}
+
+@media (max-width: 640px) {
+  .container {
+    padding: 10px 10px 28px;
+  }
+  header h1 {
+    font-size: 1.15rem;
+  }
+  .breadth-grid,
+  .indices-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .breadth-grid:not(.breadth-grid-custom) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .indicators {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .symbol-input {
+    width: 96px;
+  }
+  .sentiment {
+    font-size: 1.35rem;
+  }
+  .section-toggle {
+    top: 8px;
+    right: 8px;
+    width: 26px;
+    height: 26px;
+  }
+}
+
+/* Extra-narrow phones */
+@media (max-width: 380px) {
+  .container {
+    padding: 8px 8px 24px;
+  }
+  .breadth-grid,
+  .indices-grid,
+  .breadth-grid:not(.breadth-grid-custom) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
