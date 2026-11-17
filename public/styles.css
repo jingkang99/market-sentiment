@@ -31,28 +31,27 @@
   --footer: #5c6578;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   --legend-muted: #6b7280;
-  /* High-contrast tiles on dark UI */
-  --breadth-bull-bg: #0f3d28;
-  --breadth-bull-fg: #ecfdf5;
-  --breadth-bear-bg: #4a1518;
-  --breadth-bear-fg: #fef2f2;
-  /* Mixed: brighter slate-gold so it reads clearly on dark UI */
-  --breadth-mixed-bg: #5c4d1f;
-  --breadth-mixed-fg: #fffbeb;
+  /* Soft modern tiles on dark UI */
+  --breadth-bull-bg: #1a3d32;
+  --breadth-bull-fg: #b6f0d4;
+  --breadth-bear-bg: #3d2428;
+  --breadth-bear-fg: #f0c4c8;
+  --breadth-mixed-bg: #3a3428;
+  --breadth-mixed-fg: #e8dfc4;
   --breadth-loading-bg: var(--panel-2);
-  --breadth-change-up: #4ade80;
-  --breadth-change-down: #f87171;
-  /* VIX level colors (dark theme) */
-  --vix-green-bg: #0f3d28;
-  --vix-green-fg: #86efac;
-  --vix-blue-bg: #1e3a5f;
-  --vix-blue-fg: #93c5fd;
-  --vix-amber-bg: #4a3b12;
-  --vix-amber-fg: #fde68a;
-  --vix-orange-bg: #5c2e0e;
-  --vix-orange-fg: #fdba74;
-  --vix-red-bg: #4a1518;
-  --vix-red-fg: #fca5a5;
+  --breadth-change-up: #6ee7b7;
+  --breadth-change-down: #f0a8ae;
+  /* VIX level colors (dark theme) — same soft family */
+  --vix-green-bg: #1a3d32;
+  --vix-green-fg: #b6f0d4;
+  --vix-blue-bg: #243044;
+  --vix-blue-fg: #b4c9e8;
+  --vix-amber-bg: #3a3428;
+  --vix-amber-fg: #e8dfc4;
+  --vix-orange-bg: #3d2e24;
+  --vix-orange-fg: #f0d0b4;
+  --vix-red-bg: #3d2428;
+  --vix-red-fg: #f0c4c8;
 }
 
 /* Soft light theme — easy on the eyes */
@@ -583,17 +582,17 @@ header p {
 .breadth-bull {
   background: var(--breadth-bull-bg);
   color: var(--breadth-bull-fg);
-  border-color: rgba(74, 222, 128, 0.35);
+  border-color: rgba(182, 240, 212, 0.14);
 }
 .breadth-bear {
   background: var(--breadth-bear-bg);
   color: var(--breadth-bear-fg);
-  border-color: rgba(248, 113, 113, 0.35);
+  border-color: rgba(240, 196, 200, 0.14);
 }
 .breadth-mixed {
   background: var(--breadth-mixed-bg);
   color: var(--breadth-mixed-fg);
-  border-color: rgba(253, 224, 71, 0.45);
+  border-color: rgba(232, 223, 196, 0.14);
 }
 .breadth-loading {
   background: var(--breadth-loading-bg);
