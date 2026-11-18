@@ -6,14 +6,15 @@
   --panel: #161b26;
   --panel-2: #1a2130;
   --border: #2a3344;
-  --text: #e8ecf3;
-  --muted: #8b94a7;
+  /* Primary and secondary text: brighter for comfortable dark-mode reading */
+  --text: #f1f5f9;
+  --muted: #b8c3d4;
   --accent: #3b82f6;
-  --up: #22c55e;
-  --down: #ef4444;
-  --bull: #22c55e;
-  --bear: #ef4444;
-  --neutral: #94a3b8;
+  --up: #4ade80;
+  --down: #f87171;
+  --bull: #4ade80;
+  --bear: #f87171;
+  --neutral: #cbd5e1;
   --input-bg: #0d1118;
   --hover: #222a3a;
   --hover-border: #3a4558;
@@ -24,34 +25,35 @@
   --error-text: #fca5a5;
   --tip-bg: rgba(15, 18, 24, 0.94);
   --tip-border: #3a4558;
-  --tip-title: #c7d0e0;
+  --tip-title: #f1f5f9;
   --tip-rule: #2a3344;
   --skeleton: #12161f;
-  --section: #c7d0e0;
-  --footer: #5c6578;
+  --section: #e2e8f0;
+  --footer: #aeb9ca;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  --legend-muted: #6b7280;
-  /* Soft modern tiles on dark UI */
-  --breadth-bull-bg: #1a3d32;
-  --breadth-bull-fg: #b6f0d4;
-  --breadth-bear-bg: #3d2428;
-  --breadth-bear-fg: #f0c4c8;
-  --breadth-mixed-bg: #3a3428;
-  --breadth-mixed-fg: #e8dfc4;
+  --legend-muted: #aeb9ca;
+  /* High-contrast tiles on dark UI */
+  --breadth-bull-bg: #0A9750;
+  --breadth-bull-fg: #ecfdf5;
+  --breadth-bear-bg: #A50B16;
+  --breadth-bear-fg: #fef2f2;
+  /* Mixed: brighter slate-gold so it reads clearly on dark UI */
+  --breadth-mixed-bg: #533B68;
+  --breadth-mixed-fg: #fffbeb;
   --breadth-loading-bg: var(--panel-2);
-  --breadth-change-up: #6ee7b7;
-  --breadth-change-down: #f0a8ae;
-  /* VIX level colors (dark theme) — same soft family */
-  --vix-green-bg: #1a3d32;
-  --vix-green-fg: #b6f0d4;
-  --vix-blue-bg: #243044;
-  --vix-blue-fg: #b4c9e8;
-  --vix-amber-bg: #3a3428;
-  --vix-amber-fg: #e8dfc4;
-  --vix-orange-bg: #3d2e24;
-  --vix-orange-fg: #f0d0b4;
-  --vix-red-bg: #3d2428;
-  --vix-red-fg: #f0c4c8;
+  --breadth-change-up: #4ade80;
+  --breadth-change-down: #f87171;
+  /* VIX level colors (dark theme) */
+  --vix-green-bg: #0f3d28;
+  --vix-green-fg: #86efac;
+  --vix-blue-bg: #1e3a5f;
+  --vix-blue-fg: #93c5fd;
+  --vix-amber-bg: #4a3b12;
+  --vix-amber-fg: #fde68a;
+  --vix-orange-bg: #5c2e0e;
+  --vix-orange-fg: #fdba74;
+  --vix-red-bg: #4a1518;
+  --vix-red-fg: #fca5a5;
 }
 
 /* Soft light theme — easy on the eyes */
@@ -60,14 +62,15 @@
   --panel: #fafbfd;
   --panel-2: #f0f3f8;
   --border: #d5dbe6;
-  --text: #1e293b;
-  --muted: #64748b;
+  /* Dark, crisp text with stronger contrast on the soft light background */
+  --text: #172033;
+  --muted: #475569;
   --accent: #3b82f6;
   --up: #16a34a;
   --down: #dc2626;
   --bull: #16a34a;
   --bear: #dc2626;
-  --neutral: #64748b;
+  --neutral: #475569;
   --input-bg: #ffffff;
   --hover: #e4e9f2;
   --hover-border: #c5cedc;
@@ -78,13 +81,13 @@
   --error-text: #b91c1c;
   --tip-bg: rgba(255, 255, 255, 0.96);
   --tip-border: #d5dbe6;
-  --tip-title: #334155;
+  --tip-title: #1e293b;
   --tip-rule: #e2e8f0;
   --skeleton: #e8ecf3;
-  --section: #334155;
-  --footer: #94a3b8;
+  --section: #1e293b;
+  --footer: #526176;
   --shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
-  --legend-muted: #94a3b8;
+  --legend-muted: #526176;
   /* High-contrast tiles on light UI */
   --breadth-bull-bg: #d1fae5;
   --breadth-bull-fg: #064e3b;
@@ -582,17 +585,17 @@ header p {
 .breadth-bull {
   background: var(--breadth-bull-bg);
   color: var(--breadth-bull-fg);
-  border-color: rgba(182, 240, 212, 0.14);
+  border-color: rgba(74, 222, 128, 0.35);
 }
 .breadth-bear {
   background: var(--breadth-bear-bg);
   color: var(--breadth-bear-fg);
-  border-color: rgba(240, 196, 200, 0.14);
+  border-color: rgba(248, 113, 113, 0.35);
 }
 .breadth-mixed {
   background: var(--breadth-mixed-bg);
   color: var(--breadth-mixed-fg);
-  border-color: rgba(232, 223, 196, 0.14);
+  border-color: rgba(253, 224, 71, 0.45);
 }
 .breadth-loading {
   background: var(--breadth-loading-bg);
