@@ -6,15 +6,14 @@
   --panel: #161b26;
   --panel-2: #1a2130;
   --border: #2a3344;
-  /* Primary and secondary text: brighter for comfortable dark-mode reading */
-  --text: #f1f5f9;
-  --muted: #b8c3d4;
+  --text: #e8ecf3;
+  --muted: #8b94a7;
   --accent: #3b82f6;
-  --up: #4ade80;
-  --down: #f87171;
-  --bull: #4ade80;
-  --bear: #f87171;
-  --neutral: #cbd5e1;
+  --up: #22c55e;
+  --down: #ef4444;
+  --bull: #22c55e;
+  --bear: #ef4444;
+  --neutral: #94a3b8;
   --input-bg: #0d1118;
   --hover: #222a3a;
   --hover-border: #3a4558;
@@ -25,20 +24,20 @@
   --error-text: #fca5a5;
   --tip-bg: rgba(15, 18, 24, 0.94);
   --tip-border: #3a4558;
-  --tip-title: #f1f5f9;
+  --tip-title: #c7d0e0;
   --tip-rule: #2a3344;
   --skeleton: #12161f;
-  --section: #e2e8f0;
-  --footer: #aeb9ca;
+  --section: #c7d0e0;
+  --footer: #5c6578;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  --legend-muted: #aeb9ca;
+  --legend-muted: #6b7280;
   /* High-contrast tiles on dark UI */
   --breadth-bull-bg: #0A9750;
   --breadth-bull-fg: #ecfdf5;
   --breadth-bear-bg: #A50B16;
   --breadth-bear-fg: #fef2f2;
   /* Mixed: brighter slate-gold so it reads clearly on dark UI */
-  --breadth-mixed-bg: #533B68;
+  --breadth-mixed-bg: #5c4d1f;
   --breadth-mixed-fg: #fffbeb;
   --breadth-loading-bg: var(--panel-2);
   --breadth-change-up: #4ade80;
@@ -54,6 +53,15 @@
   --vix-orange-fg: #fdba74;
   --vix-red-bg: #4a1518;
   --vix-red-fg: #fca5a5;
+
+  /* === DEPTH SYSTEM — DARK: deep, layered black shadows === */
+  --shadow-card: 0 1px 1px rgba(0,0,0,0.5), 0 4px 10px rgba(0,0,0,0.35), 0 10px 28px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.06);
+  --shadow-card-hover: 0 2px 4px rgba(0,0,0,0.5), 0 10px 22px rgba(0,0,0,0.42), 0 18px 36px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.08);
+  --shadow-indicator: 0 1px 2px rgba(0,0,0,0.28), 0 3px 8px rgba(0,0,0,0.22);
+  --shadow-indicator-hover: 0 4px 10px rgba(0,0,0,0.32), 0 10px 20px rgba(0,0,0,0.28);
+  --shadow-tile: 0 1px 2px rgba(0,0,0,0.3), 0 4px 10px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.22);
+  --shadow-tile-hover: 0 3px 8px rgba(0,0,0,0.38), 0 10px 22px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.11);
+  --tile-hover-brightness: brightness(1.12);
 }
 
 /* Soft light theme — easy on the eyes */
@@ -62,15 +70,14 @@
   --panel: #fafbfd;
   --panel-2: #f0f3f8;
   --border: #d5dbe6;
-  /* Dark, crisp text with stronger contrast on the soft light background */
-  --text: #172033;
-  --muted: #475569;
+  --text: #1e293b;
+  --muted: #64748b;
   --accent: #3b82f6;
   --up: #16a34a;
   --down: #dc2626;
   --bull: #16a34a;
   --bear: #dc2626;
-  --neutral: #475569;
+  --neutral: #64748b;
   --input-bg: #ffffff;
   --hover: #e4e9f2;
   --hover-border: #c5cedc;
@@ -81,13 +88,13 @@
   --error-text: #b91c1c;
   --tip-bg: rgba(255, 255, 255, 0.96);
   --tip-border: #d5dbe6;
-  --tip-title: #1e293b;
+  --tip-title: #334155;
   --tip-rule: #e2e8f0;
   --skeleton: #e8ecf3;
-  --section: #1e293b;
-  --footer: #526176;
+  --section: #334155;
+  --footer: #94a3b8;
   --shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
-  --legend-muted: #526176;
+  --legend-muted: #94a3b8;
   /* High-contrast tiles on light UI */
   --breadth-bull-bg: #d1fae5;
   --breadth-bull-fg: #064e3b;
@@ -109,6 +116,15 @@
   --vix-orange-fg: #7c2d12;
   --vix-red-bg: #fecaca;
   --vix-red-fg: #7f1d1d;
+
+  /* === DEPTH SYSTEM — LIGHT: soft slate shadows, airy === */
+  --shadow-card: 0 1px 2px rgba(15,23,42,0.06), 0 4px 12px rgba(15,23,42,0.06), 0 12px 28px rgba(15,23,42,0.07), inset 0 1px 0 rgba(255,255,255,0.95);
+  --shadow-card-hover: 0 2px 6px rgba(15,23,42,0.08), 0 10px 24px rgba(15,23,42,0.09), 0 18px 36px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,1);
+  --shadow-indicator: 0 1px 2px rgba(15,23,42,0.06), 0 3px 8px rgba(15,23,42,0.05);
+  --shadow-indicator-hover: 0 4px 12px rgba(15,23,42,0.08), 0 10px 22px rgba(15,23,42,0.07);
+  --shadow-tile: 0 1px 2px rgba(15,23,42,0.07), 0 4px 10px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(15,23,42,0.04);
+  --shadow-tile-hover: 0 4px 12px rgba(15,23,42,0.10), 0 10px 24px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,1);
+  --tile-hover-brightness: brightness(1.06);
 }
 
 *,
@@ -442,7 +458,7 @@ header p {
 .overall.indices h2 {
   margin-bottom: 12px;
 }
-}
+
 .sentiment {
   font-size: 1.65rem;
   font-weight: 700;
@@ -511,7 +527,22 @@ header p {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  /* dimensional edges + depth — uses theme-tuned shadows */
+  box-shadow: var(--shadow-tile);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease, border-color 0.18s ease;
+  will-change: transform;
+}
+.breadth-tile:hover {
+  transform: translateY(-3px) scale(1.015);
+  box-shadow: var(--shadow-tile-hover);
+  filter: var(--tile-hover-brightness);
+  border-color: rgba(255,255,255,0.14);
+}
+[data-theme="light"] .breadth-tile:hover {
+  border-color: rgba(255,255,255,0.9);
+}
+.breadth-tile:active {
+  transform: translateY(-1px) scale(1.005);
 }
 .breadth-sym {
   font-size: 0.95rem;
@@ -655,7 +686,7 @@ header p {
   border-color: rgba(153, 27, 27, 0.2);
 }
 
-/* Stock cards */
+/* Stock cards — raised panels with layered shadows */
 .cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -668,6 +699,17 @@ header p {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px 14px 14px;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  will-change: transform;
+}
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card-hover);
+  border-color: var(--hover-border);
+}
+.card:active {
+  transform: translateY(-1px);
 }
 .card-header {
   display: flex;
@@ -710,11 +752,24 @@ header p {
   gap: 8px 10px;
   margin-bottom: 12px;
 }
+/* Indicator squares — subtle depth and hover lift */
 .indicator {
   background: var(--panel-2);
   border-radius: 8px;
   padding: 8px 10px;
   border: 1px solid transparent;
+  box-shadow: var(--shadow-indicator);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease, border-color 0.18s ease;
+  will-change: transform;
+}
+.indicator:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-indicator-hover);
+  filter: brightness(1.04);
+  border-color: var(--border);
+}
+.indicator:active {
+  transform: translateY(0px);
 }
 .indicator label {
   display: block;
