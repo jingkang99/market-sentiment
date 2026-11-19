@@ -9,18 +9,18 @@
   --text: #e8ecf3;
   --muted: #8b94a7;
   --accent: #3b82f6;
-  --up: #22c55e;
-  --down: #ef4444;
-  --bull: #22c55e;
-  --bear: #ef4444;
+  --up: #4ade80;
+  --down: #f87171;
+  --bull: #4ade80;
+  --bear: #f87171;
   --neutral: #94a3b8;
   --input-bg: #0d1118;
   --hover: #222a3a;
   --hover-border: #3a4558;
   --tab-active: #1e293b;
   --badge-bg: #243044;
-  --error-bg: rgba(239, 68, 68, 0.12);
-  --error-border: rgba(239, 68, 68, 0.35);
+  --error-bg: rgba(248, 113, 113, 0.12);
+  --error-border: rgba(248, 113, 113, 0.32);
   --error-text: #fca5a5;
   --tip-bg: rgba(15, 18, 24, 0.94);
   --tip-border: #3a4558;
@@ -31,17 +31,17 @@
   --footer: #5c6578;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   --legend-muted: #6b7280;
-  /* High-contrast tiles on dark UI */
-  --breadth-bull-bg: #0A9750;
-  --breadth-bull-fg: #ecfdf5;
-  --breadth-bear-bg: #A50B16;
-  --breadth-bear-fg: #fef2f2;
-  /* Mixed: brighter slate-gold so it reads clearly on dark UI */
-  --breadth-mixed-bg: #5c4d1f;
-  --breadth-mixed-fg: #fffbeb;
+  /* Softened tiles on dark UI — muted, easy to read */
+  --breadth-bull-bg: #174d36;
+  --breadth-bull-fg: #d1fae5;
+  --breadth-bear-bg: #6b1e2a;
+  --breadth-bear-fg: #fee2e2;
+  /* Mixed: softer warm slate-gold */
+  --breadth-mixed-bg: #4a4228;
+  --breadth-mixed-fg: #fef9c3;
   --breadth-loading-bg: var(--panel-2);
-  --breadth-change-up: #4ade80;
-  --breadth-change-down: #f87171;
+  --breadth-change-up: #6ee7b7;
+  --breadth-change-down: #fca5a5;
   /* VIX level colors (dark theme) */
   --vix-green-bg: #0f3d28;
   --vix-green-fg: #86efac;
@@ -73,18 +73,18 @@
   --text: #1e293b;
   --muted: #64748b;
   --accent: #3b82f6;
-  --up: #16a34a;
-  --down: #dc2626;
-  --bull: #16a34a;
-  --bear: #dc2626;
+  --up: #0e9f6e;
+  --down: #e05a5a;
+  --bull: #0e9f6e;
+  --bear: #e05a5a;
   --neutral: #64748b;
   --input-bg: #ffffff;
   --hover: #e4e9f2;
   --hover-border: #c5cedc;
   --tab-active: #e2e8f0;
   --badge-bg: #e2e8f0;
-  --error-bg: rgba(220, 38, 38, 0.08);
-  --error-border: rgba(220, 38, 38, 0.28);
+  --error-bg: rgba(224, 90, 90, 0.08);
+  --error-border: rgba(224, 90, 90, 0.26);
   --error-text: #b91c1c;
   --tip-bg: rgba(255, 255, 255, 0.96);
   --tip-border: #d5dbe6;
@@ -95,16 +95,16 @@
   --footer: #94a3b8;
   --shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
   --legend-muted: #94a3b8;
-  /* High-contrast tiles on light UI */
-  --breadth-bull-bg: #d1fae5;
-  --breadth-bull-fg: #064e3b;
-  --breadth-bear-bg: #fee2e2;
+  /* Softened tiles on light UI — pastel but readable */
+  --breadth-bull-bg: #dff7e9;
+  --breadth-bull-fg: #0a4a2e;
+  --breadth-bear-bg: #fde8e8;
   --breadth-bear-fg: #7f1d1d;
   --breadth-mixed-bg: #fef3c7;
   --breadth-mixed-fg: #713f12;
   --breadth-loading-bg: #eef1f6;
-  --breadth-change-up: #047857;
-  --breadth-change-down: #b91c1c;
+  --breadth-change-up: #0e7a5a;
+  --breadth-change-down: #c24141;
   /* VIX level colors (light theme) */
   --vix-green-bg: #bbf7d0;
   --vix-green-fg: #14532d;
@@ -616,17 +616,17 @@ header p {
 .breadth-bull {
   background: var(--breadth-bull-bg);
   color: var(--breadth-bull-fg);
-  border-color: rgba(74, 222, 128, 0.35);
+  border-color: rgba(110, 231, 183, 0.22);
 }
 .breadth-bear {
   background: var(--breadth-bear-bg);
   color: var(--breadth-bear-fg);
-  border-color: rgba(248, 113, 113, 0.35);
+  border-color: rgba(252, 165, 165, 0.22);
 }
 .breadth-mixed {
   background: var(--breadth-mixed-bg);
   color: var(--breadth-mixed-fg);
-  border-color: rgba(253, 224, 71, 0.45);
+  border-color: rgba(253, 224, 71, 0.28);
 }
 .breadth-loading {
   background: var(--breadth-loading-bg);
@@ -788,19 +788,19 @@ header p {
 .indicator-bull {
   background: var(--breadth-bull-bg);
   color: var(--breadth-bull-fg);
-  border-color: rgba(22, 101, 52, 0.12);
+  border-color: rgba(23, 77, 54, 0.16);
 }
-.indicator-bull label { color: inherit; opacity: 0.85; }
+.indicator-bull label { color: inherit; opacity: 0.82; }
 .indicator-bear {
   background: var(--breadth-bear-bg);
   color: var(--breadth-bear-fg);
-  border-color: rgba(153, 27, 27, 0.12);
+  border-color: rgba(107, 30, 42, 0.16);
 }
-.indicator-bear label { color: inherit; opacity: 0.85; }
+.indicator-bear label { color: inherit; opacity: 0.82; }
 .indicator-mixed {
   background: var(--breadth-mixed-bg);
   color: var(--breadth-mixed-fg);
-  border-color: rgba(138, 100, 32, 0.12);
+  border-color: rgba(74, 66, 40, 0.16);
 }
 .indicator-mixed label { color: inherit; opacity: 0.85; }
 
@@ -813,11 +813,11 @@ header p {
   letter-spacing: 0.05em;
 }
 .signal.bullish {
-  background: rgba(34, 197, 94, 0.15);
+  background: rgba(74, 222, 128, 0.14);
   color: var(--bull);
 }
 .signal.bearish {
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(248, 113, 113, 0.13);
   color: var(--bear);
 }
 .signal.neutral {
