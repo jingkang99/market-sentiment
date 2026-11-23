@@ -10,6 +10,14 @@
 //   node momentums.mjs --test                    -> run built-in tests
 //   node momentums.mjs --no-holidays SPY         -> disable holiday filtering
 
+const POWER_INDICATORS = [
+  { name: 'VWAP', weight: 1.5, why: 'Institutional fair value' },
+  { name: 'Supertrend', weight: 1.5, why: 'Clearest trend signal' },
+  { name: 'OBV', weight: 1.2, why: 'Smart money tracking' },
+  { name: 'MFI', weight: 1.1, why: 'Volume-weighted RSI' },
+  { name: 'Aroon', weight: 1.0, why: 'Detects new trends early' },
+];
+
 /* ================= RAW ANSI ESCAPE CODES ================= */
 const RESET  = '\x1b[0m';
 const BOLD   = '\x1b[1m';
@@ -279,6 +287,187 @@ const adxCalc = (h, l, c, p = 14) => {
   return { adx: adxA, plusDI, minusDI };
 };
 
+/* ================= ADDITIONAL INDICATORS ================= */
+
+// 1. VWAP - Volume Weighted Average Price (resets daily)
+const vwap = (h, l, c, v) => {
+  const out = new Array(c.length).fill(null);
+  let cumPV = 0, cumV = 0;
+  for (let i = 0; i < c.length; i++) {
+    const typical = (h[i] + l[i] + c[i]) / 3;
+    cumPV += typical * v[i];
+    cumV += v[i];
+    out[i] = cumV === 0 ? null : cumPV / cumV;
+  }
+  return out;
+};
+
+// 2. OBV - On Balance Volume
+const obv = (c, v) => {
+  const out = new Array(c.length).fill(0);
+  for (let i = 1; i < c.length; i++) {
+    if (c[i] > c[i - 1]) out[i] = out[i - 1] + v[i];
+    else if (c[i] < c[i - 1]) out[i] = out[i - 1] - v[i];
+    else out[i] = out[i - 1];
+  }
+  return out;
+};
+
+// 3. ATR - Average True Range (volatility)
+const atr = (h, l, c, p = 14) => {
+  const tr = new Array(c.length).fill(null);
+  tr[0] = h[0] - l[0];
+  for (let i = 1; i < c.length; i++) {
+    tr[i] = Math.max(h[i] - l[i], Math.abs(h[i] - c[i - 1]), Math.abs(l[i] - c[i - 1]));
+  }
+  return sma(tr.slice(1), p).map((v, i) => i + 1 >= p ? v : null);
+};
+
+// 4. MFI - Money Flow Index (volume-weighted RSI)
+const mfi = (h, l, c, v, p = 14) => {
+  const tp = c.map((_, i) => (h[i] + l[i] + c[i]) / 3);
+  const mf = tp.map((t, i) => t * v[i]);
+  const out = new Array(c.length).fill(null);
+  for (let i = p; i < c.length; i++) {
+    let pos = 0, neg = 0;
+    for (let j = i - p + 1; j <= i; j++) {
+      if (tp[j] > tp[j - 1]) pos += mf[j];
+      else if (tp[j] < tp[j - 1]) neg += mf[j];
+    }
+    out[i] = neg === 0 ? 100 : 100 - (100 / (1 + pos / neg));
+  }
+  return out;
+};
+
+// 5. Williams %R
+const williamsR = (h, l, c, p = 14) => {
+  const out = new Array(c.length).fill(null);
+  for (let i = p - 1; i < c.length; i++) {
+    let hh = -Infinity, ll = Infinity;
+    for (let j = i - p + 1; j <= i; j++) {
+      if (h[j] > hh) hh = h[j];
+      if (l[j] < ll) ll = l[j];
+    }
+    out[i] = hh === ll ? -50 : ((hh - c[i]) / (hh - ll)) * -100;
+  }
+  return out;
+};
+
+// 6. CCI - Commodity Channel Index
+const cci = (h, l, c, p = 20) => {
+  const tp = c.map((_, i) => (h[i] + l[i] + c[i]) / 3);
+  const smaTP = sma(tp, p);
+  const out = new Array(c.length).fill(null);
+  for (let i = p - 1; i < c.length; i++) {
+    let meanDev = 0;
+    for (let j = i - p + 1; j <= i; j++) meanDev += Math.abs(tp[j] - smaTP[i]);
+    meanDev /= p;
+    out[i] = meanDev === 0 ? 0 : (tp[i] - smaTP[i]) / (0.015 * meanDev);
+  }
+  return out;
+};
+
+// 7. ROC - Rate of Change
+const roc = (c, p = 12) => {
+  const out = new Array(c.length).fill(null);
+  for (let i = p; i < c.length; i++) {
+    out[i] = c[i - p] === 0 ? 0 : ((c[i] - c[i - p]) / c[i - p]) * 100;
+  }
+  return out;
+};
+
+// 8. Aroon
+const aroon = (h, l, p = 25) => {
+  const up = new Array(h.length).fill(null);
+  const down = new Array(h.length).fill(null);
+  for (let i = p; i < h.length; i++) {
+    let hhIdx = i, llIdx = i;
+    for (let j = i - p; j <= i; j++) {
+      if (h[j] >= h[hhIdx]) hhIdx = j;
+      if (l[j] <= l[llIdx]) llIdx = j;
+    }
+    up[i] = ((i - hhIdx) / p) * 100;
+    down[i] = ((i - llIdx) / p) * 100;
+  }
+  return { up, down };
+};
+
+// 9. Supertrend
+const supertrend = (h, l, c, p = 10, mult = 3) => {
+  const atrVals = atr(h, l, c, p);
+  const out = new Array(c.length).fill(null);
+  const trend = new Array(c.length).fill(null);
+  for (let i = p; i < c.length; i++) {
+    if (atrVals[i] == null) continue;
+    const hl2 = (h[i] + l[i]) / 2;
+    const upper = hl2 + mult * atrVals[i];
+    const lower = hl2 - mult * atrVals[i];
+    if (i === p || out[i - 1] == null) {
+      out[i] = c[i] > upper ? lower : upper;
+      trend[i] = c[i] > upper ? 1 : -1;
+    } else {
+      out[i] = c[i] > out[i - 1] ? lower : upper;
+      if (out[i - 1] === lower && c[i] > lower) trend[i] = 1;
+      else if (out[i - 1] === upper && c[i] < upper) trend[i] = -1;
+      else trend[i] = trend[i - 1];
+    }
+  }
+  return { value: out, trend };
+};
+
+// 10. CMF - Chaikin Money Flow
+const cmf = (h, l, c, v, p = 20) => {
+  const mfv = c.map((_, i) => {
+    const range = h[i] - l[i];
+    return range === 0 ? 0 : (((c[i] - l[i]) - (h[i] - c[i])) / range) * v[i];
+  });
+  const out = new Array(c.length).fill(null);
+  for (let i = p - 1; i < c.length; i++) {
+    let mfvSum = 0, vSum = 0;
+    for (let j = i - p + 1; j <= i; j++) { mfvSum += mfv[j]; vSum += v[j]; }
+    out[i] = vSum === 0 ? 0 : mfvSum / vSum;
+  }
+  return out;
+};
+
+// 11. Keltner Channels
+const keltner = (h, l, c, p = 20, mult = 2) => {
+  const emaC = ema(c, p);
+  const atrVals = atr(h, l, c, p);
+  const upper = emaC.map((e, i) => e != null && atrVals[i] != null ? e + mult * atrVals[i] : null);
+  const lower = emaC.map((e, i) => e != null && atrVals[i] != null ? e - mult * atrVals[i] : null);
+  return { upper, middle: emaC, lower };
+};
+
+// 12. Donchian Channels
+const donchian = (h, l, p = 20) => {
+  const upper = new Array(h.length).fill(null);
+  const lower = new Array(l.length).fill(null);
+  for (let i = p - 1; i < h.length; i++) {
+    let hh = -Infinity, ll = Infinity;
+    for (let j = i - p + 1; j <= i; j++) {
+      if (h[j] > hh) hh = h[j];
+      if (l[j] < ll) ll = l[j];
+    }
+    upper[i] = hh;
+    lower[i] = ll;
+  }
+  return { upper, lower };
+};
+
+// 13. Historical Volatility (annualized)
+const hvol = (c, p = 20) => {
+  const out = new Array(c.length).fill(null);
+  const returns = c.map((v, i) => i === 0 ? 0 : Math.log(v / c[i - 1]));
+  for (let i = p; i < c.length; i++) {
+    const slice = returns.slice(i - p + 1, i + 1);
+    const mean = slice.reduce((a, b) => a + b, 0) / slice.length;
+    const variance = slice.reduce((a, b) => a + (b - mean) ** 2, 0) / slice.length;
+    out[i] = Math.sqrt(variance) * Math.sqrt(252) * 100; // annualized %
+  }
+  return out;
+};
+
 /* ================= SCORING ================= */
 function verdictFor(score) {
   if (score >= 45) return 'STRONG BULLISH';
@@ -307,15 +496,16 @@ function getIndicatorParams(interval) {
 
 function analyze(symbol, candles, meta, options = {}) {
   const { interval = '1d', useHolidays = true } = options;
-
-  const close = candles.map((c) => c.c);
-  const high  = candles.map((c) => c.h);
-  const low   = candles.map((c) => c.l);
+  const close = candles.map(c => c.c);
+  const high  = candles.map(c => c.h);
+  const low   = candles.map(c => c.l);
+  const vol   = candles.map(c => c.v);
   const n = close.length;
   const i = n - 1;
   const price = close[i];
   const params = getIndicatorParams(interval);
 
+  // Existing indicators
   const S20  = sma(close, params.sma[0]);
   const S50  = sma(close, params.sma[1]);
   const S200 = sma(close, params.sma[2]);
@@ -327,9 +517,23 @@ function analyze(symbol, candles, meta, options = {}) {
   const ST   = stochastic(high, low, close);
   const X    = adxCalc(high, low, close, params.adx);
 
+  // NEW: Additional indicators
+  const V    = vwap(high, low, close, vol);
+  const OBV  = obv(close, vol);
+  const A    = atr(high, low, close, 14);
+  const MF   = mfi(high, low, close, vol, 14);
+  const WR   = williamsR(high, low, close, 14);
+  const CC   = cci(high, low, close, 20);
+  const RC   = roc(close, 12);
+  const AR   = aroon(high, low, 25);
+  const ST2  = supertrend(high, low, close, 10, 3);
+  const CMF  = cmf(high, low, close, vol, 20);
+  const HV   = hvol(close, 20);
+
   const sig = [];
   const add = (name, dir, w, note) => sig.push({ name, dir, w, note });
 
+  // ===== EXISTING SIGNALS =====
   if (S50[i] != null)
     add(`Price vs SMA ${params.sma[1]}`, price > S50[i] ? 1 : -1, 1.2, `${price.toFixed(2)} vs ${S50[i].toFixed(2)}`);
   if (S200[i] != null)
@@ -339,7 +543,6 @@ function analyze(symbol, candles, meta, options = {}) {
       S50[i] > S200[i] ? 1 : -1, 1.4,
       S50[i] > S200[i] ? 'golden regime' : 'death regime');
 
-  // Slope check only for daily/weekly
   if (interval === '1d' || interval === '1wk') {
     if (S20[i] != null && S20[i - 5] != null && Math.abs(S20[i] - S20[i - 5]) / S20[i - 5] >= 0.002)
       add(`SMA ${params.sma[0]} slope (5d)`,
@@ -368,7 +571,75 @@ function analyze(symbol, candles, meta, options = {}) {
   if (B[i] != null)
     add('Bollinger %B', B[i] > 0.55 ? 1 : B[i] < 0.45 ? -1 : 0, 0.8, `${(B[i] * 100).toFixed(0)}%`);
 
-  // 52-week high/low only for daily
+  // ===== NEW SIGNALS =====
+
+  // VWAP — Institutional fair value
+  if (V[i] != null) {
+    add('VWAP', price > V[i] ? 1 : -1, 1.5,
+      `${((price - V[i]) / V[i] * 100).toFixed(2)}% ${price > V[i] ? 'above' : 'below'}`);
+  }
+
+  // OBV Trend — Smart money flow
+  if (OBV[i] != null && OBV[Math.max(0, i - 20)] != null) {
+    const obvRising = OBV[i] > OBV[Math.max(0, i - 20)];
+    add('OBV trend (20p)', obvRising ? 1 : -1, 1.2, obvRising ? 'accumulation' : 'distribution');
+  }
+
+  // ATR — Volatility regime
+  if (A[i] != null && A[i - 14] != null) {
+    const volRising = A[i] > A[i - 14];
+    add('ATR volatility', volRising ? 0 : 0, 0.4, `${A[i].toFixed(2)} ${volRising ? '(expanding)' : '(contracting)'}`);
+  }
+
+  // MFI — Volume-weighted RSI
+  if (MF[i] != null) {
+    add('MFI 14', MF[i] > 50 ? 1 : MF[i] < 50 ? -1 : 0, 1.1,
+      MF[i] > 80 ? 'OB' : MF[i] < 20 ? 'OS' : MF[i].toFixed(0));
+  }
+
+  // Williams %R
+  if (WR[i] != null) {
+    add('Williams %R', WR[i] > -20 ? 1 : WR[i] < -80 ? -1 : 0, 0.7,
+      WR[i] > -20 ? 'overbought' : WR[i] < -80 ? 'oversold' : WR[i].toFixed(0));
+  }
+
+  // CCI
+  if (CC[i] != null) {
+    add('CCI 20', CC[i] > 100 ? 1 : CC[i] < -100 ? -1 : 0, 0.8,
+      CC[i] > 200 ? 'strong bull' : CC[i] < -200 ? 'strong bear' : CC[i].toFixed(0));
+  }
+
+  // ROC
+  if (RC[i] != null) {
+    add('ROC 12', RC[i] > 0 ? 1 : RC[i] < 0 ? -1 : 0, 0.6, `${RC[i].toFixed(1)}%`);
+  }
+
+  // Aroon
+  if (AR.up[i] != null && AR.down[i] != null) {
+    add('Aroon', AR.up[i] > 70 && AR.down[i] < 30 ? 1 :
+              AR.down[i] > 70 && AR.up[i] < 30 ? -1 : 0, 1.0,
+      `Up ${AR.up[i].toFixed(0)} Down ${AR.down[i].toFixed(0)}`);
+  }
+
+  // Supertrend
+  if (ST2.trend[i] != null) {
+    add('Supertrend', ST2.trend[i] > 0 ? 1 : -1, 1.5,
+      ST2.trend[i] > 0 ? 'bullish flip' : 'bearish flip');
+  }
+
+  // CMF
+  if (CMF[i] != null) {
+    add('CMF 20', CMF[i] > 0.05 ? 1 : CMF[i] < -0.05 ? -1 : 0, 0.9,
+      CMF[i].toFixed(3));
+  }
+
+  // Historical Volatility
+  if (HV[i] != null) {
+    const volRegime = HV[i] > 30 ? 'high' : HV[i] < 15 ? 'low' : 'normal';
+    add('Hist Vol (annual)', 0, 0.3, `${HV[i].toFixed(0)}% ${volRegime}`);
+  }
+
+  // ===== 52-WEEK POSITION (existing) =====
   if (interval === '1d' || interval === '1wk') {
     const yh = meta.fiftyTwoWeekHigh, yl = meta.fiftyTwoWeekLow;
     if (yh && yl) {
@@ -382,7 +653,6 @@ function analyze(symbol, candles, meta, options = {}) {
   const score = Math.max(-100, Math.min(100, (raw / tw) * 100));
   const verdict = verdictFor(score);
 
-  /* =================== DATE FORMATTING =================== */
   const lastDateRaw = new Date(candles[n - 1].t * 1000);
   const dateOptions = interval === '1d' || interval === '1wk' || interval === '1mo'
     ? { month: 'short', day: 'numeric' }
@@ -398,21 +668,19 @@ function analyze(symbol, candles, meta, options = {}) {
 
   let pc;
   let changeNote = '';
-
   if (meta.previousClose && meta.previousClose > 0) {
     pc = meta.previousClose;
     changeNote = '';
   } else {
     pc = getPreviousTradingClose(candles, n - 1, useHolidays);
-    if (lastIsWeekend)      changeNote = ' (weekend)';
+    if (lastIsWeekend) changeNote = ' (weekend)';
     else if (lastIsHoliday) changeNote = ' (holiday)';
-    else if (!pc)           changeNote = ' (no prev data)';
+    else if (!pc) changeNote = ' (no prev data)';
   }
 
   const chgPct = pc ? ((mp - pc) / pc) * 100 : 0;
   const chgStr = `${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`;
 
-  /* ---------- COLORIZED OUTPUT ---------- */
   console.log(`\n${cyan(bold(`=== ${symbol}  (${lastDate}) [${intervalLabel}] ===`))}`);
   console.log(`Price ${bold(mp.toFixed(2))}  ${chgPct >= 0 ? bull(chgStr) : bear(chgStr)} vs prev close ${pc ? pc.toFixed(2) : '—'}${dim(changeNote)}`);
   const bCnt = sig.filter((s) => s.dir === 1).length;
@@ -420,10 +688,25 @@ function analyze(symbol, candles, meta, options = {}) {
   const nCnt = sig.filter((s) => s.dir === 0).length;
   console.log(`SCORE: ${scoreColor(score)(`${score >= 0 ? '+' : ''}${score.toFixed(1)}`)}  ->  ${bold(verdictColor(verdict)(verdict))}`);
   console.log(`${bull(`Bull ${bCnt}`)} | ${bear(`Bear ${rCnt}`)} | ${neu(`Neutral ${nCnt}`)}\n`);
-  for (const s of sig) {
-    const tag = s.dir === 1 ? bull('▲ BULL    ') : s.dir === -1 ? bear('▼ BEAR    ') : neu('■ NEUTRAL ');
-    console.log(`  ${tag} ${s.name.padEnd(22)} ${s.note}`);
+
+  // Group signals by category
+  const groups = {
+    'Trend':      sig.filter(s => s.name.includes('SMA') || s.name.includes('EMA') || s.name.includes('Supertrend') || s.name.includes('Aroon') || s.name.includes('VWAP')),
+    'Momentum':   sig.filter(s => s.name.includes('RSI') || s.name.includes('Stoch') || s.name.includes('MACD') || s.name.includes('Williams') || s.name.includes('CCI') || s.name.includes('ROC') || s.name.includes('MFI')),
+    'Volume':     sig.filter(s => s.name.includes('OBV') || s.name.includes('CMF') || s.name.includes('Vol')),
+    'Volatility': sig.filter(s => s.name.includes('ATR') || s.name.includes('Bollinger') || s.name.includes('Hist')),
+    'Breadth':    sig.filter(s => s.name.includes('ADX') || s.name.includes('52-week') || s.name.includes('DI')),
+  };
+
+  for (const [groupName, groupSigs] of Object.entries(groups)) {
+    if (groupSigs.length === 0) continue;
+    console.log(`  ${dim('── ' + groupName + ' ──')}`);
+    for (const s of groupSigs) {
+      const tag = s.dir === 1 ? bull('▲ BULL    ') : s.dir === -1 ? bear('▼ BEAR    ') : neu('■ NEUTRAL ');
+      console.log(`  ${tag} ${s.name.padEnd(22)} ${s.note}`);
+    }
   }
+
   return score;
 }
 
