@@ -1,5 +1,5 @@
 // app.jsx  (ASCII-only, no backticks, no smart quotes)
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { analyze } from "./indicators.js";
 import { PriceChart, COLORS as C } from "./charts.jsx";
@@ -99,7 +99,7 @@ async function fetchLocalQuote(symbol) {
       t: Date.now() - (data.closes.length - i) * 86400000, o: c, h: c, l: c, c, v: 0,
     }));
   }
-  return Object.assign({}, data, { source: data.source || "local api" });
+  return data;
 }
 
 const PROXIES = [
@@ -590,15 +590,13 @@ function parseIndexList(text) {
     }
     if (out.length >= 220) break;
   }
-  // First symbol is always VIX
-  const vixIdx = out.findIndex((s) => s === "^VIX" || s === "VIX");
+  // First symbol is always VIX (any VIX/VI alias has already been normalized to ^VIX)
+  const vixIdx = out.indexOf("^VIX");
   if (vixIdx === -1) {
     out.unshift("^VIX");
   } else if (vixIdx > 0) {
     out.splice(vixIdx, 1);
     out.unshift("^VIX");
-  } else {
-    out[0] = "^VIX";
   }
   // final dedupe after possible prepend
   const final = [];
@@ -844,6 +842,12 @@ function App() {
     return "dark";
   });
 
+  // Monotonic request id — older in-flight loadData calls ignore their own results
+  // to prevent stale responses from overwriting newer state.
+  const loadIdRef = useRef(0);
+  // Holds the active symbol-error timer so we can cancel it on unmount or new submit.
+  const symbolErrorTimerRef = useRef(null);
+
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     try { localStorage.setItem("ms.theme", theme); } catch (e) {}
@@ -859,10 +863,14 @@ function App() {
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const myLoadId = ++loadIdRef.current;
+    const isStale = () => loadIdRef.current !== myLoadId;
     try {
       const list = await loadBreadthWatchlist();
+      if (isStale()) return;
       setWatchlist(list);
       const idxList = await loadIndexWatchlist();
+      if (isStale()) return;
       setIndexList(idxList);
 
       const sectorFetches = SECTOR_SYMBOLS.map((sym) => fetchYahooChart(sym));
@@ -875,6 +883,7 @@ function App() {
         ...watchFetches,
         ...indexFetches,
       ]);
+      if (isStale()) return;
       const s = results[0];
       const o = results[1];
       let hasData = false;
@@ -927,20 +936,26 @@ function App() {
       setFgError(null);
       try {
         const fgRes = await fetchJSON("/api/fear-greed", 12000);
+        if (isStale()) return;
         setFgData(fgRes);
       } catch (fgErr) {
+        if (isStale()) return;
         console.warn("[fear-greed]", fgErr && fgErr.message);
         setFgError((fgErr && fgErr.message) || "Fear & Greed unavailable");
       } finally {
-        setFgLoading(false);
+        if (!isStale()) setFgLoading(false);
       }
 
+      if (isStale()) return;
       if (hasData) setLastUpdated(new Date());
       if (errs.length) setError(errs.join(" | ") + (hasData ? " (partial data shown)" : " - is the local server running? Try: npm start"));
     } catch (e) {
+      if (isStale()) return;
       console.error(e);
       setError((e && e.message) || "Failed to load market data.");
-    } finally { setLoading(false); }
+    } finally {
+      if (!isStale()) setLoading(false);
+    }
   }, [symbol]);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -957,6 +972,10 @@ function App() {
     if (sym === "SPY") { setSymbolError("SPY is already shown on the left - pick another symbol."); return; }
     setSymbolLoading(true);
     setSymbolError(null);
+    if (symbolErrorTimerRef.current) {
+      clearTimeout(symbolErrorTimerRef.current);
+      symbolErrorTimerRef.current = null;
+    }
     const SYMBOL_TIMEOUT_MS = 7000;
     try {
       // Cap wait at 7s so invalid / missing symbols fail quickly
@@ -976,12 +995,23 @@ function App() {
       setLastUpdated(new Date());
     } catch (err) {
       setSymbolError(sym + ": " + ((err && err.message) || "failed"));
-      // Auto-clear error message after 2 seconds
-      setTimeout(function () {
+      // Auto-clear error message after 2 seconds (cancelable if component unmounts or a new submit starts)
+      symbolErrorTimerRef.current = setTimeout(function () {
+        symbolErrorTimerRef.current = null;
         setSymbolError(null);
       }, 2000);
     } finally { setSymbolLoading(false); }
   };
+
+  // Clear any pending symbol-error timer if the App unmounts.
+  useEffect(() => {
+    return () => {
+      if (symbolErrorTimerRef.current) {
+        clearTimeout(symbolErrorTimerRef.current);
+        symbolErrorTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const resetSymbol = () => { setSymbol("QQQ"); setSymbolInput(""); setSymbolError(null); try { localStorage.removeItem("ms.symbol"); } catch (e) {} };
 
@@ -1027,7 +1057,7 @@ function App() {
             {theme === "dark" ? (
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l-1.41-1.41" />
               </svg>
             ) : (
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1231,4 +1261,3 @@ function App() {
 }
 
 createRoot(document.getElementById("root")).render(<App />);
-

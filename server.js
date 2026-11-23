@@ -219,7 +219,7 @@ function normalizeChart(result, symbol) {
   const closes = bars.map((b) => b.c);
   const price = typeof meta.regularMarketPrice === "number" ? meta.regularMarketPrice : closes[closes.length - 1];
 
-  // chartPreviousClose = close BEFORE the whole range (1y ago) -> NOT a 1-day change
+  // previousClose = the bar before the latest one (yesterday's close) — the basis for the 1-day change
   const previousClose =
     typeof meta.previousClose === "number"
       ? meta.previousClose
@@ -360,61 +360,69 @@ async function fetchFearGreed() {
   if (fgCache.data && now - fgCache.at < FG_CACHE_TTL) return fgCache.data;
 
   const url = FG_URL;
-  let raw;
-  if (typeof fetch === "function") {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
+  let lastErr = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let raw;
     try {
-      const res = await fetch(url, {
-        signal: ctrl.signal,
-        headers: {
-          "User-Agent": USER_AGENT,
-          Accept: "application/json",
-          Referer: "https://www.cnn.com/",
-          Origin: "https://www.cnn.com",
-        },
-      });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      raw = await res.json();
-    } finally {
-      clearTimeout(timer);
-    }
-  } else {
-    raw = await new Promise((resolve, reject) => {
-      const lib = https;
-      const req = lib.get(
-        url,
-        {
-          headers: {
-            "User-Agent": USER_AGENT,
-            Accept: "application/json",
-            Referer: "https://www.cnn.com/",
-            Origin: "https://www.cnn.com",
-          },
-          timeout: 15000,
-        },
-        (res) => {
-          let body = "";
-          res.setEncoding("utf8");
-          res.on("data", (c) => (body += c));
-          res.on("end", () => {
-            if (res.statusCode !== 200) return reject(new Error("HTTP " + res.statusCode));
-            try {
-              resolve(JSON.parse(body));
-            } catch {
-              reject(new Error("Invalid JSON from CNN"));
-            }
+      if (typeof fetch === "function") {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 15000);
+        try {
+          const res = await fetch(url, {
+            signal: ctrl.signal,
+            headers: {
+              "User-Agent": USER_AGENT,
+              Accept: "application/json",
+              Referer: "https://www.cnn.com/",
+              Origin: "https://www.cnn.com",
+            },
           });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          raw = await res.json();
+        } finally {
+          clearTimeout(timer);
         }
-      );
-      req.on("timeout", () => req.destroy(new Error("CNN request timed out")));
-      req.on("error", reject);
-    });
+      } else {
+        raw = await new Promise((resolve, reject) => {
+          const req = https.get(
+            url,
+            {
+              headers: {
+                "User-Agent": USER_AGENT,
+                Accept: "application/json",
+                Referer: "https://www.cnn.com/",
+                Origin: "https://www.cnn.com",
+              },
+              timeout: 15000,
+            },
+            (res) => {
+              let body = "";
+              res.setEncoding("utf8");
+              res.on("data", (c) => (body += c));
+              res.on("end", () => {
+                if (res.statusCode !== 200) return reject(new Error("HTTP " + res.statusCode));
+                try {
+                  resolve(JSON.parse(body));
+                } catch {
+                  reject(new Error("Invalid JSON from CNN"));
+                }
+              });
+            }
+          );
+          req.on("timeout", () => req.destroy(new Error("CNN request timed out")));
+          req.on("error", reject);
+        });
+      }
+      if (!raw || !raw.fear_and_greed) throw new Error("Unexpected CNN Fear & Greed payload");
+      fgCache = { at: now, data: raw };
+      return raw;
+    } catch (err) {
+      lastErr = err;
+      // Back off 400ms, then 800ms before the final attempt
+      if (attempt < 2) await sleep(400 * (attempt + 1));
+    }
   }
-
-  if (!raw || !raw.fear_and_greed) throw new Error("Unexpected CNN Fear & Greed payload");
-  fgCache = { at: now, data: raw };
-  return raw;
+  throw lastErr || new Error("Could not reach CNN Fear & Greed");
 }
 
 app.get(
@@ -489,4 +497,3 @@ app.listen(PORT, HOST, () => {
   console.log(`\n  ✅  Market Sentiment running  ->  http://localhost:${PORT}`);
   console.log(`  🔎  Diagnostics             ->  http://localhost:${PORT}/api/diag\n`);
 });
-
