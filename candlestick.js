@@ -5,22 +5,6 @@
  * Pulls ~6 months of daily OHLCV data from Yahoo Finance using only Node's
  * built-in `https`, `zlib`, `fs`, `path`, `os`. Saves to <SYMBOL>_<DATE>.csv
  * and renders an ANSI candlestick chart in the Linux terminal.
- *
- *   - Single raw fetch, no cookie/crumb (like momentums.mjs)
- *   - Multi-host failover: query1 / query2 round-robin
- *   - Date-stamped CSV cache: skips Yahoo entirely if today's file exists
- *   - Auto-detects terminal width AND height from price range
- *   - Verbose HTTP logging via -v / --verbose
- *
- * Usage:
- *   node candlestick.js AAPL
- *   node candlestick.js MARA --height 30
- *   node candlestick.js MSFT --no-chart
- *   node candlestick.js AAPL --no-cache
- *   node candlestick.js -v AAPL
- *   node candlestick.js MARA --width 200
- *   node candlestick.js MARA --height auto
- *   node candlestick.js AAPL --out-dir ./data
  */
 
 'use strict';
@@ -45,21 +29,32 @@ const CACHE_DIR = path.join(
   process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'),
   'candlestick-cli'
 );
-const DATA_TTL   = 5  * 60 * 1000;
-const RETRY_TTL  = 30 * 1000;
+const DATA_TTL        = 5  * 60 * 1000;
+const RETRY_TTL       = 30 * 1000;
 const SYMBOL_DELAY_MS = 800;
 
 // =========================================================================
 // ANSI
 // =========================================================================
-const RESET  = '\x1b[0m';
-const BOLD   = '\x1b[1m';
-const DIM    = '\x1b[90m';
-const GREEN  = '\x1b[32m';
-const RED    = '\x1b[31m';
-const CYAN   = '\x1b[36m';
-const YELL   = '\x1b[33m';
-const MAGENTA = '\x1b[35m';
+const RESET    = '\x1b[0m';
+const BOLD     = '\x1b[1m';
+const DIM      = '\x1b[90m';
+const GREEN    = '\x1b[32m';
+const RED      = '\x1b[31m';
+const CYAN     = '\x1b[36m';
+const YELL     = '\x1b[33m';
+const MAGENTA  = '\x1b[35m';
+const CLR_LINE = '\x1b[2K\r';
+
+const GAP_STYLES = {
+  '0':        '',
+  'none':     '',
+  'compact':  '',
+  'dot':      `${DIM}·${RESET}`,
+  'hairline': `${DIM}┊${RESET}`,
+  '1':        ' ',
+  'space':    ' ',
+};
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ts = () => new Date().toISOString().slice(11, 23);
@@ -67,6 +62,13 @@ const ts = () => new Date().toISOString().slice(11, 23);
 let VERBOSE = false;
 function vlog(msg) {
   if (VERBOSE) console.error(`${DIM}[${ts()}]${RESET} ${msg}`);
+}
+
+function nextArgValue(argList, idx, flagName) {
+  if (idx + 1 >= argList.length) {
+    throw new Error(`Missing value after ${flagName}`);
+  }
+  return argList[idx + 1];
 }
 
 // =========================================================================
@@ -77,32 +79,27 @@ if (args.length === 0 || args[0] === '-h' || args[0] === '--help') {
   console.log('Usage: node candlestick.js [options] <SYM> [SYM2 SYM3 ...]');
   console.log();
   console.log('Options:');
-  console.log('  -v, --verbose           log every HTTP request to stderr');
-  console.log('  --height <n|auto>      chart height in terminal rows (default: auto)');
-  console.log('  --width  <n|auto>      candles shown (default: auto-detect from terminal)');
-  console.log('  --no-chart             skip terminal rendering');
-  console.log('  --no-cache             ignore CSV + JSON cache (force fresh fetch)');
-  console.log('  --no-csv               do not write CSV file');
-  console.log('  --out-dir <dir>        directory to write CSV files (default: current dir)');
+  console.log('  -v, --verbose            log every HTTP request to stderr');
+  console.log('  --height <n|auto>        chart height in terminal rows (default: auto)');
+  console.log('  --width  <n|auto>        candles shown (default: auto-fit latest to terminal)');
+  console.log('  --gap <0|1|dot|hairline> gap between candles (default: 50)');
+  console.log('  --no-chart               skip terminal rendering');
+  console.log('  --no-cache               ignore CSV + JSON cache (force fresh fetch)');
+  console.log('  --no-csv                 do not write CSV file');
+  console.log('  --out-dir <dir>          directory to write CSV files (default: current dir)');
   console.log();
   console.log('Examples:');
   console.log('  node candlestick.js AAPL');
-  console.log('  node candlestick.js MARA TSLA NVDA');
-  console.log('  node candlestick.js -v AAPL --no-cache');
-  console.log('  node candlestick.js MARA --width 200');
-  console.log('  node candlestick.js MARA --height auto');
-  console.log('  node candlestick.js AAPL --out-dir ./data');
-  console.log();
-  console.log('CSV cache:');
-  console.log('  On successful fetch, saves <SYMBOL>_<YYYY-MM-DD>.csv.');
-  console.log('  If that file already exists for today, the script reuses it and skips');
-  console.log('  the Yahoo Finance request entirely.');
+  console.log('  node candlestick.js AAPL --gap 0        # maximum bars in terminal width');
+  console.log('  node candlestick.js AAPL --gap 1        # wide space gap between bars');
+  console.log('  node candlestick.js AAPL --gap hairline # faint vertical hairline separator');
   process.exit(args.length === 0 ? 1 : 0);
 }
 
 const opts = {
-  height: null,
+  height: 50,
   width: null,
+  gap: '1',
   drawChart: true,
   useCache: true,
   writeCsv: true,
@@ -110,32 +107,57 @@ const opts = {
 };
 const symbols = [];
 
-for (let i = 0; i < args.length; i++) {
-  const a = args[i];
-  if      (a === '-v' || a === '--verbose') VERBOSE = true;
-  else if (a === '--height') {
-    const v = args[++i];
-    opts.height = v === 'auto' ? null : parseInt(v, 10);
+try {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '-v' || a === '--verbose') {
+      VERBOSE = true;
+    } else if (a === '--height') {
+      const v = nextArgValue(args, i, '--height');
+      i++;
+      const parsed = parseInt(v, 10);
+      opts.height = (v === 'auto' || Number.isNaN(parsed) || parsed <= 0) ? null : parsed;
+    } else if (a === '--width') {
+      const v = nextArgValue(args, i, '--width');
+      i++;
+      const parsed = parseInt(v, 10);
+      opts.width = (v === 'auto' || Number.isNaN(parsed) || parsed <= 0) ? null : parsed;
+    } else if (a === '--gap') {
+      const g = nextArgValue(args, i, '--gap').toLowerCase();
+      i++;
+      if (!Object.prototype.hasOwnProperty.call(GAP_STYLES, g)) {
+        throw new Error(`Invalid --gap "${g}". Use one of: 0, 1, dot, hairline`);
+      }
+      opts.gap = g;
+    } else if (a === '--no-chart') {
+      opts.drawChart = false;
+    } else if (a === '--no-cache') {
+      opts.useCache = false;
+    } else if (a === '--no-csv') {
+      opts.writeCsv = false;
+    } else if (a === '--out-dir') {
+      opts.outDir = nextArgValue(args, i, '--out-dir');
+      i++;
+    } else if (a.startsWith('-')) {
+      vlog(`${YELL}[cli]${RESET} unknown flag: ${a}`);
+    } else {
+      symbols.push(a.toUpperCase());
+    }
   }
-  else if (a === '--width') {
-    const v = args[++i];
-    opts.width = v === 'auto' ? null : parseInt(v, 10);
-  }
-  else if (a === '--no-chart') { opts.drawChart = false; }
-  else if (a === '--no-cache') { opts.useCache  = false; }
-  else if (a === '--no-csv')   { opts.writeCsv  = false; }
-  else if (a === '--out-dir') {
-    opts.outDir = args[++i];
-  }
-  else if (a.startsWith('-')) {
-    vlog(`${YELL}[cli]${RESET} unknown flag: ${a}`);
-  } else {
-    symbols.push(a.toUpperCase());
-  }
+} catch (err) {
+  console.error(`${RED}Error:${RESET} ${err.message}`);
+  process.exit(1);
 }
+
 if (symbols.length === 0) {
   console.error('No symbols provided.');
   process.exit(1);
+}
+
+function getGapConfig(gapName) {
+  const rendered = GAP_STYLES[gapName] ?? GAP_STYLES.dot;
+  const colsPerGap = rendered.length === 0 ? 0 : 1;
+  return { rendered, colsPerGap };
 }
 
 // =========================================================================
@@ -169,7 +191,7 @@ function tryLoadCsv(symbol, outDir) {
         const open = +parts[1], high = +parts[2], low = +parts[3], close = +parts[4];
         const vol  = parts.length >= 6 ? +parts[5] : 0;
         if (!date || !isFinite(open) || !isFinite(high) || !isFinite(low) || !isFinite(close)) continue;
-        rows.push({ date, open, high, low, close, volume: vol });
+        rows.push({ date, open, high, low, close, volume: isFinite(vol) ? vol : 0 });
       }
       if (rows.length < 20) {
         vlog(`${YELL}[csv]${RESET} ${filename} only has ${rows.length} rows, ignoring`);
@@ -191,7 +213,7 @@ function tryLoadCsv(symbol, outDir) {
 function cacheGet(file) {
   try {
     const j = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (Date.now() - j._cachedAt > j._ttl) return null;
+    if (!j._cachedAt || !j._ttl || Date.now() - j._cachedAt > j._ttl) return null;
     return j;
   } catch { return null; }
 }
@@ -205,36 +227,44 @@ function cachePut(file, payload, ttl) {
 // =========================================================================
 // Auto-detect terminal dimensions
 // =========================================================================
-function autoDetectWidth() {
+function autoDetectWidth(totalRows, colsPerGap = 1) {
   const cols = process.stdout.columns || 120;
-  const RESERVED = 14;
-  return Math.max(40, Math.min(250, cols - RESERVED));
+  const LABEL_W = 10;
+  const SPINE_W = 1;
+  const RIGHT_MARGIN = 2;
+  const availCols = Math.max(10, cols - LABEL_W - SPINE_W - RIGHT_MARGIN);
+
+  // Span for N candles = N + (N - 1) * colsPerGap = N * (1 + colsPerGap) - colsPerGap
+  const stride = 1 + colsPerGap;
+  const maxFittingCandles = Math.max(1, Math.floor((availCols + colsPerGap) / stride));
+
+  return typeof totalRows === 'number' && totalRows > 0
+    ? Math.min(totalRows, maxFittingCandles)
+    : maxFittingCandles;
 }
 
 function autoDetectHeight(data) {
-  const TERM_ROWS = process.stdout.rows || 30;
-  const MAX_H = Math.max(15, Math.min(80, TERM_ROWS - 12));
-  const MIN_H = 15;
+  const TERM_ROWS = process.stdout.rows || 32;
+  const MAX_H = Math.max(16, Math.min(70, TERM_ROWS - 12));
+  const MIN_H = 16;
 
   if (!data || data.length === 0) return 26;
 
   const maxP = Math.max(...data.map(d => d.high));
   const minP = Math.min(...data.map(d => d.low));
-  const range = maxP - minP || 1;
+  const range = maxP - minP;
+  if (!isFinite(range) || range <= 0) return 24;
 
-  // 25th-percentile candle size = body + wick
-  const sizes = data
-    .map(d => Math.abs(d.close - d.open) + (d.high - d.low))
-    .filter(s => s > 0)
+  const typicalRanges = data
+    .map(d => d.high - d.low)
+    .filter(r => r > 0)
     .sort((a, b) => a - b);
 
-  if (sizes.length === 0) return 26;
+  if (typicalRanges.length === 0) return 26;
 
-  // Target: every candle gets at least 4 pixels of vertical space
-  const p25 = sizes[Math.floor(sizes.length * 0.25)];
-  const TARGET_PX = 4;
-  const requiredTotalPx = Math.ceil(TARGET_PX * range / p25);
-  const height = Math.ceil(requiredTotalPx / 2);
+  const p25 = typicalRanges[Math.floor(typicalRanges.length * 0.25)];
+  const desiredHalfRows = Math.ceil((2.2 * range) / p25);
+  const height = Math.ceil(desiredHalfRows / 2);
 
   return Math.max(MIN_H, Math.min(MAX_H, height));
 }
@@ -245,10 +275,10 @@ function autoDetectHeight(data) {
 function httpsGet(rawUrl, extraHeaders = {}, redirectsLeft = 5) {
   const url = new URL(rawUrl);
   const headers = {
-    'User-Agent':       USER_AGENT,
-    'Accept-Encoding':  'gzip, deflate, br',
-    'Accept':           'application/json,text/plain,*/*',
-    'Accept-Language':  'en-US,en;q=0.9',
+    'User-Agent':      USER_AGENT,
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Accept':          'application/json,text/plain,*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
     ...extraHeaders,
   };
 
@@ -309,7 +339,6 @@ async function fetchHistorical(symbol) {
   const now  = Math.floor(Date.now() / 1000);
   const past = now - 6 * 30 * 24 * 60 * 60;
 
-  // FIX: include symbol in cache key so different tickers don't collide
   const cacheKey = `${symbol}_${past}_${now}`;
   const dataFile = path.join(CACHE_DIR, `data_${symbol}_${cacheKey}.json`);
 
@@ -318,6 +347,9 @@ async function fetchHistorical(symbol) {
     if (hit && hit.rows) {
       vlog(`${GREEN}[cache]${RESET} hit ${DIM}${dataFile}${RESET} (${hit.rows.length} rows)`);
       return hit.rows;
+    }
+    if (hit && hit._negative) {
+      throw new Error('429 Too Many Requests (cached cooldown active)');
     }
     vlog(`${YELL}[cache]${RESET} miss ${DIM}${dataFile}${RESET}`);
   }
@@ -375,14 +407,14 @@ async function fetchHistorical(symbol) {
         continue;
       }
 
-      const ts = result.timestamp || [];
-      const q  = result.indicators.quote[0];
-      const rows = [];
-      for (let i = 0; i < ts.length; i++) {
+      const tsArr = result.timestamp || [];
+      const q     = result.indicators.quote[0];
+      const rows  = [];
+      for (let i = 0; i < tsArr.length; i++) {
         if (q.open[i] == null || q.high[i] == null ||
             q.low[i]  == null || q.close[i] == null) continue;
         rows.push({
-          date:   new Date(ts[i] * 1000).toISOString().slice(0, 10),
+          date:   new Date(tsArr[i] * 1000).toISOString().slice(0, 10),
           open:   Number(q.open[i]),
           high:   Number(q.high[i]),
           low:    Number(q.low[i]),
@@ -394,7 +426,6 @@ async function fetchHistorical(symbol) {
         throw new Error(`No usable OHLC rows for "${symbol}". The ticker may be invalid or delisted.`);
       }
 
-      // FIX: sort rows chronologically so the chart draws left-to-right in time order
       rows.sort((a, b) => a.date.localeCompare(b.date));
 
       cachePut(dataFile, { rows }, DATA_TTL);
@@ -433,7 +464,7 @@ async function fetchHistorical(symbol) {
 
 function logRetry(msg, waitSec, n, max, host) {
   process.stdout.write(
-    `${YELL}↻${RESET} ${DIM}${msg} from ${host} — retrying in ${waitSec.toFixed(1)}s [${n}/${max}]${RESET}\r`
+    `${CLR_LINE}${YELL}↻${RESET} ${DIM}${msg} from ${host} — retrying in ${waitSec.toFixed(1)}s [${n}/${max}]${RESET}`
   );
 }
 
@@ -450,129 +481,110 @@ function saveCsv(symbol, data, outDir) {
 }
 
 // =========================================================================
-// Downsample
+// Slice latest candles to fit terminal width
 // =========================================================================
-function downsample(data, targetWidth) {
-  if (data.length <= targetWidth) return data;
-  const groupSize = Math.ceil(data.length / targetWidth);
-  const out = [];
-  for (let i = 0; i < data.length; i += groupSize) {
-    const slice = data.slice(i, i + groupSize);
-    out.push({
-      date:   slice[0].date,
-      open:   slice[0].open,
-      high:   Math.max(...slice.map(s => s.high)),
-      low:    Math.min(...slice.map(s => s.low)),
-      close:  slice[slice.length - 1].close,
-      volume: slice.reduce((a, s) => a + s.volume, 0),
-    });
-  }
-  return out;
+function sliceLatestToWidth(data, maxCandles) {
+  if (!Array.isArray(data) || data.length === 0) return [];
+  if (!maxCandles || maxCandles >= data.length) return data;
+  return data.slice(-maxCandles);
 }
 
 // =========================================================================
-// Renderer
+// Renderer (padded Y-axis scale + accurate half-block body/wick + gap)
 // =========================================================================
-function renderChart(data, symbol, height) {
+function overlaps(aLow, aHigh, bLow, bHigh) {
+  return Math.max(aLow, bLow) <= Math.min(aHigh, bHigh);
+}
+
+function renderChart(data, symbol, height, sourceRowCount = data.length, gapName = opts.gap) {
   if (!data || data.length === 0) {
     console.log(`${YELL}No data to render for ${symbol}${RESET}`);
     return;
   }
 
   if (!height) height = autoDetectHeight(data);
+  height = Math.max(8, height);
 
-  const totalPixels = height * 2;          // 2 vertical pixels per char row
-  const maxP  = Math.max(...data.map(d => d.high));
-  const minP  = Math.min(...data.map(d => d.low));
-  const range = maxP - minP || 1;
+  const { rendered: gapStr, colsPerGap } = getGapConfig(gapName);
 
-  // pixelY = 0 (bottom, minP) ... totalPixels-1 (top, maxP)
-  const px = p => Math.round(((p - minP) / range) * (totalPixels - 1));
+  const rawMax = Math.max(...data.map(d => d.high));
+  const rawMin = Math.min(...data.map(d => d.low));
+  const rawRange = rawMax - rawMin;
 
-  const candles = data.map(d => {
-    const o = px(d.open);
-    const c = px(d.close);
-    const h = px(d.high);
-    const l = px(d.low);
-    return {
-      bullish: d.close >= d.open,
-      bodyTop:    Math.max(o, c),  // higher price → larger pixelY → upper part of body
-      bodyBottom: Math.min(o, c),  // lower  price → smaller pixelY → lower part of body
-      h, l,
-    };
-  });
+  const pad = rawRange > 0 ? rawRange * 0.04 : (Math.abs(rawMax) * 0.02 || 1);
+  const scaleMin = rawMin - pad;
+  const scaleMax = rawMax + pad;
+  const scaleRange = scaleMax - scaleMin || 1;
 
-  const inBody = (p, cd) => p >= cd.bodyBottom && p <= cd.bodyTop;
-  const inWick = (p, cd) => p >= cd.l && p <= cd.h;
+  const totalHalfRows = height * 2;
+  const stepPrice = scaleRange / totalHalfRows;
+  const bandForHalfRow = k => [scaleMin + k * stepPrice, scaleMin + (k + 1) * stepPrice];
 
-  const LABEL_W = 9;
+  const candles = data.map(d => ({
+    bullish:    d.close >= d.open,
+    bodyTop:    Math.max(d.open, d.close),
+    bodyBottom: Math.min(d.open, d.close),
+    high:       d.high,
+    low:        d.low,
+  }));
+
+  const LABEL_W = 10;
   const SPINE_W = 1;
 
-  // 5 evenly-spaced price labels (rows 0, H/4, H/2, 3H/4, H-1)
   const labelRows = new Array(height).fill(' '.repeat(LABEL_W));
   for (let i = 0; i < 5; i++) {
     const r = Math.round((i * (height - 1)) / 4);
-    const centerPx = (totalPixels - 1) - r * 2 - 0.5;
-    const price = minP + (centerPx / (totalPixels - 1)) * range;
+    const midHalfRow = (totalHalfRows - 1) - (r * 2 + 0.5);
+    const price = scaleMin + ((midHalfRow + 0.5) / totalHalfRows) * scaleRange;
     labelRows[r] = price.toFixed(2).padStart(LABEL_W - 1) + ' ';
   }
 
-  // Build rows from TOP of screen (r=0 = maxP) to BOTTOM (r=H-1 = minP)
   const rows = [];
   for (let r = 0; r < height; r++) {
-    const topPx = (totalPixels - 1) - r * 2;
-    const botPx = topPx - 1;
+    const topK = (totalHalfRows - 1) - r * 2;
+    const botK = topK - 1;
+    const [topLow, topHigh] = bandForHalfRow(topK);
+    const [botLow, botHigh] = botK >= 0 ? bandForHalfRow(botK) : [scaleMin, scaleMin];
 
-    let candle = '';
-    for (const cd of candles) {
-      const bull    = cd.bullish;
-      const bodyCol = bull ? GREEN : RED;
-      const wickCol = bull ? GREEN : RED;
+    let candleLine = '';
+    for (let idx = 0; idx < candles.length; idx++) {
+      const cd = candles[idx];
+      const col = cd.bullish ? GREEN : RED;
 
-      const topInBody = inBody(topPx, cd);
-      const botInBody = inBody(botPx, cd);
-      const topInWick = inWick(topPx, cd);
-      const botInWick = inWick(botPx, cd);
+      const topBody = overlaps(topLow, topHigh, cd.bodyBottom, cd.bodyTop);
+      const botBody = botK >= 0 && overlaps(botLow, botHigh, cd.bodyBottom, cd.bodyTop);
+      const topWick = overlaps(topLow, topHigh, cd.low, cd.high);
+      const botWick = botK >= 0 && overlaps(botLow, botHigh, cd.low, cd.high);
 
-      let ch;
-
-      // CASE 1: Both pixels in body → full block
-      if (topInBody && botInBody) {
-        ch = `${bodyCol}█${RESET}`;
-      }
-      // CASE 2: Only top pixel in body → upper half block
-      else if (topInBody) {
-        ch = `${bodyCol}▀${RESET}`;
-      }
-      // CASE 3: Only bottom pixel in body → lower half block
-      else if (botInBody) {
-        ch = `${bodyCol}▄${RESET}`;
-      }
-      // CASE 4: Neither pixel in body, but in wick → wick only
-      else if (topInWick || botInWick) {
-        ch = `${wickCol}│${RESET}`;
-      }
-      // CASE 5: Outside both → empty
-      else {
-        ch = ' ';
+      let ch = ' ';
+      if (topBody && botBody) {
+        ch = `${col}█${RESET}`;
+      } else if (topBody && !botBody) {
+        ch = botWick ? `${col}█${RESET}` : `${col}▀${RESET}`;
+      } else if (!topBody && botBody) {
+        ch = topWick ? `${col}█${RESET}` : `${col}▄${RESET}`;
+      } else if (topWick || botWick) {
+        ch = `${col}│${RESET}`;
       }
 
-      candle += ch;
+      candleLine += ch;
+      if (idx < candles.length - 1) {
+        candleLine += gapStr;
+      }
     }
-    rows.push(`${DIM}${labelRows[r]}${RESET}${DIM}│${RESET}${candle}`);
+
+    rows.push(`${DIM}${labelRows[r]}${RESET}${DIM}│${RESET}${candleLine}`);
   }
 
-  // Header
-  const groupSize = Math.max(1, Math.ceil(data.length / candles.length));
-  const downsampled = groupSize > 1
-    ? `, ${candles.length} bars (${groupSize} daily per candle)`
-    : '';
+  const windowNote = sourceRowCount > candles.length
+    ? `, showing latest ${candles.length} of ${sourceRowCount} CSV bars`
+    : `, ${candles.length} bars`;
   const header =
     `${BOLD}${CYAN}▏ ${symbol} ${RESET}` +
     `${BOLD}— Candlestick · last 6 months ${RESET}` +
-    `${DIM}(daily, ${data.length} source bars${downsampled})${RESET}`;
+    `${DIM}(daily${windowNote}, gap: ${gapName})${RESET}`;
   const summary =
-    `${DIM}High ${maxP.toFixed(2)}   Low ${minP.toFixed(2)}   Range ${range.toFixed(2)}${RESET}   ` +
+    `${DIM}High ${rawMax.toFixed(2)}   Low ${rawMin.toFixed(2)}   Range ${rawRange.toFixed(2)}${RESET}   ` +
     `${GREEN}█${RESET}${DIM} bull${RESET}  ${RED}█${RESET}${DIM} bear${RESET}  ` +
     `${GREEN}│${RESET}${DIM} bull wick${RESET}  ${RED}│${RESET}${DIM} bear wick${RESET}`;
 
@@ -582,17 +594,15 @@ function renderChart(data, symbol, height) {
   rows.forEach(row => console.log(row));
   console.log(`${' '.repeat(LABEL_W + SPINE_W)} ${DIM}↓ low${RESET}`);
 
-  // Date axis (bottom) — aligned under candle columns
   const W = candles.length;
-  const first  = data[0].date;
-  const mid    = data[Math.floor(data.length / 2)].date;
-  const last   = data[data.length - 1].date;
-  const axisLine =
-    `${' '.repeat(LABEL_W)}${DIM}└${'─'.repeat(Math.max(1, W))}┘${RESET}`;
-  console.log(axisLine);
+  const chartSpan = Math.max(1, W + Math.max(0, W - 1) * colsPerGap);
+  const first = data[0].date;
+  const mid   = data[Math.floor(data.length / 2)].date;
+  const last  = data[data.length - 1].date;
 
-  // Date line — LABEL_W + SPINE_W, so dates align with candles at column 10
-  const dateLine = new Array(W).fill(' ');
+  console.log(`${' '.repeat(LABEL_W)}${DIM}└${'─'.repeat(chartSpan)}┘${RESET}`);
+
+  const dateLine = new Array(chartSpan).fill(' ');
   const put = (x, s) => {
     if (x < 0) return;
     for (let i = 0; i < s.length; i++) {
@@ -600,21 +610,20 @@ function renderChart(data, symbol, height) {
     }
   };
   put(0, first);
-  put(Math.max(0, Math.floor(W / 2 - mid.length / 2)), mid);
-  put(Math.max(0, W - last.length), last);
+  put(Math.max(0, Math.floor(chartSpan / 2 - mid.length / 2)), mid);
+  put(Math.max(0, chartSpan - last.length), last);
   console.log(' '.repeat(LABEL_W + SPINE_W) + DIM + dateLine.join('') + RESET);
 
-  // Min/max reference + height info
   let highIdx = 0, lowIdx = 0;
   for (let i = 1; i < data.length; i++) {
     if (data[i].high > data[highIdx].high) highIdx = i;
     if (data[i].low  < data[lowIdx].low)  lowIdx  = i;
   }
-  const actualPxPerDollar = (totalPixels / range).toFixed(1);
+  const actualPxPerDollar = (totalHalfRows / scaleRange).toFixed(2);
   console.log(
     `${DIM}highest: ${data[highIdx].high.toFixed(2)} on ${data[highIdx].date}  ` +
     `lowest: ${data[lowIdx].low.toFixed(2)} on ${data[lowIdx].date}  ` +
-    `height: ${height} rows (${actualPxPerDollar} px/$)${RESET}`
+    `height: ${height} rows (${actualPxPerDollar} half-rows/$)${RESET}`
   );
   console.log();
 }
@@ -629,16 +638,14 @@ async function runOne(symbol) {
     const csvData = tryLoadCsv(symbol, opts.outDir);
     if (csvData) {
       raw = csvData;
-      process.stdout.write(' '.repeat(60) + '\r');
-      console.log(`${GREEN}✓${RESET} Loaded ${BOLD}${raw.length} rows${RESET} from CSV ${DIM}(no Yahoo fetch)${RESET}`);
+      process.stdout.write(`${CLR_LINE}${GREEN}✓${RESET} Loaded ${BOLD}${raw.length} rows${RESET} from CSV ${DIM}(no Yahoo fetch)${RESET}\n`);
     }
   }
 
   if (!raw) {
-    process.stdout.write(`${DIM}Fetching ${symbol} from Yahoo Finance…${RESET}\r`);
+    process.stdout.write(`${CLR_LINE}${DIM}Fetching ${symbol} from Yahoo Finance…${RESET}`);
     raw = await fetchHistorical(symbol);
-    process.stdout.write(' '.repeat(60) + '\r');
-    console.log(`${GREEN}✓${RESET} Fetched ${BOLD}${raw.length} rows${RESET} from Yahoo`);
+    process.stdout.write(`${CLR_LINE}${GREEN}✓${RESET} Fetched ${BOLD}${raw.length} rows${RESET} from Yahoo\n`);
     if (opts.writeCsv) {
       const csvFile = saveCsv(symbol, raw, opts.outDir);
       console.log(`${GREEN}✓${RESET} Saved ${BOLD}${csvFile}${RESET}`);
@@ -646,10 +653,11 @@ async function runOne(symbol) {
   }
 
   if (opts.drawChart) {
-    const width = opts.width !== null ? opts.width : autoDetectWidth();
-    const view = downsample(raw, width);
-    const height = opts.height !== null ? opts.height : autoDetectHeight(view);
-    renderChart(view, symbol, height);
+    const { colsPerGap } = getGapConfig(opts.gap);
+    const maxCandles     = opts.width !== null ? opts.width : autoDetectWidth(raw.length, colsPerGap);
+    const view           = sliceLatestToWidth(raw, maxCandles);
+    const height         = opts.height !== null ? opts.height : autoDetectHeight(view);
+    renderChart(view, symbol, height, raw.length, opts.gap);
   }
 }
 
@@ -660,12 +668,10 @@ async function runOne(symbol) {
     try {
       await runOne(sym);
     } catch (err) {
-      process.stdout.write(' '.repeat(60) + '\r');
-      console.error(`${RED}Error:${RESET} ${sym}: ${err.message || err}`);
+      process.stdout.write(`${CLR_LINE}${RED}Error:${RESET} ${sym}: ${err.message || err}\n`);
       failed++;
     }
     if (i < symbols.length - 1) await sleep(SYMBOL_DELAY_MS);
   }
   if (failed > 0) process.exit(1);
 })();
-
