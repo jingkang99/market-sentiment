@@ -44,7 +44,7 @@ npx pkg . --targets node18-win-x64 --out-path dist
 - Draw Candlestick Chart
 
 ```
-node candlestick.js v
+node candlestick.js intc
 
 node momentums.mjs
 ```
