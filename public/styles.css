@@ -37,7 +37,7 @@
   --breadth-bear-bg: #6b1e2a;
   --breadth-bear-fg: #fee2e2;
   /* Mixed: softer warm slate-gold */
-  --breadth-mixed-bg: #4a4228;
+  --breadth-mixed-bg: #92950D;
   --breadth-mixed-fg: #fef9c3;
   --breadth-loading-bg: var(--panel-2);
   --breadth-change-up: #6ee7b7;
@@ -96,9 +96,9 @@
   --shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
   --legend-muted: #94a3b8;
   /* Softened tiles on light UI — pastel but readable */
-  --breadth-bull-bg: #dff7e9;
+  --breadth-bull-bg: #BFE9DB;
   --breadth-bull-fg: #0a4a2e;
-  --breadth-bear-bg: #fde8e8;
+  --breadth-bear-bg: #FDE2E6;
   --breadth-bear-fg: #7f1d1d;
   --breadth-mixed-bg: #fef3c7;
   --breadth-mixed-fg: #713f12;
