@@ -32,6 +32,7 @@ const CACHE_DIR = path.join(
 const DATA_TTL        = 5  * 60 * 1000;
 const RETRY_TTL       = 30 * 1000;
 const SYMBOL_DELAY_MS = 800;
+const CSV_MAX_AGE_MS  = 24 * 60 * 60 * 1000;   // legacy CSVs older than this are ignored
 
 // =========================================================================
 // ANSI
@@ -82,7 +83,7 @@ if (args.length === 0 || args[0] === '-h' || args[0] === '--help') {
   console.log('  -v, --verbose            log every HTTP request to stderr');
   console.log('  --height <n|auto>        chart height in terminal rows (default: auto)');
   console.log('  --width  <n|auto>        candles shown (default: auto-fit latest to terminal)');
-  console.log('  --gap <0|1|dot|hairline> gap between candles (default: 50)');
+  console.log('  --gap <0|1|dot|hairline> gap between candles (default: 1)');
   console.log('  --no-chart               skip terminal rendering');
   console.log('  --no-cache               ignore CSV + JSON cache (force fresh fetch)');
   console.log('  --no-csv                 do not write CSV file');
@@ -156,7 +157,7 @@ if (symbols.length === 0) {
 
 function getGapConfig(gapName) {
   const rendered = GAP_STYLES[gapName] ?? GAP_STYLES.dot;
-  const colsPerGap = rendered.length === 0 ? 0 : 1;
+  const colsPerGap = rendered === '' ? 0 : 1;   // visible width, not ANSI byte length
   return { rendered, colsPerGap };
 }
 
@@ -172,11 +173,20 @@ function csvPathFor(symbol, date, outDir) {
 function legacyCsvPathFor(symbol, outDir) {
   return path.join(outDir, `${symbol}_6mo.csv`);
 }
+function legacyCsvIsFresh(filename) {
+  try {
+    return (Date.now() - fs.statSync(filename).mtimeMs) <= CSV_MAX_AGE_MS;
+  } catch { return false; }
+}
 function tryLoadCsv(symbol, outDir) {
   const dateFile = csvPathFor(symbol, todayString(), outDir);
   const legacyFile = legacyCsvPathFor(symbol, outDir);
   for (const [label, filename] of [['date-stamped', dateFile], ['legacy', legacyFile]]) {
     if (!fs.existsSync(filename)) continue;
+    if (label === 'legacy' && !legacyCsvIsFresh(filename)) {
+      vlog(`${YELL}[csv]${RESET} ${filename} is stale, ignoring`);
+      continue;
+    }
     try {
       const text = fs.readFileSync(filename, 'utf8').trim();
       if (!text) continue;
@@ -243,6 +253,8 @@ function autoDetectWidth(totalRows, colsPerGap = 1) {
     : maxFittingCandles;
 }
 
+// Auto height: drive from the typical BODY range (|close-open|), not the full
+// wick-to-wick range, so bodies stay legible instead of rendering ~1 row tall.
 function autoDetectHeight(data) {
   const TERM_ROWS = process.stdout.rows || 32;
   const MAX_H = Math.max(16, Math.min(70, TERM_ROWS - 12));
@@ -255,15 +267,17 @@ function autoDetectHeight(data) {
   const range = maxP - minP;
   if (!isFinite(range) || range <= 0) return 24;
 
-  const typicalRanges = data
-    .map(d => d.high - d.low)
+  const bodyRanges = data
+    .map(d => Math.abs(d.close - d.open))
     .filter(r => r > 0)
     .sort((a, b) => a - b);
+  if (bodyRanges.length === 0) return 26;
 
-  if (typicalRanges.length === 0) return 26;
+  const p25Body = bodyRanges[Math.floor(bodyRanges.length * 0.25)];
 
-  const p25 = typicalRanges[Math.floor(typicalRanges.length * 0.25)];
-  const desiredHalfRows = Math.ceil((2.2 * range) / p25);
+  // Target: the typical body spans ~4 half-rows (2 rows).
+  const targetHalfRows = 4;
+  const desiredHalfRows = Math.ceil((targetHalfRows * range) / p25Body);
   const height = Math.ceil(desiredHalfRows / 2);
 
   return Math.max(MIN_H, Math.min(MAX_H, height));
@@ -496,6 +510,29 @@ function overlaps(aLow, aHigh, bLow, bHigh) {
   return Math.max(aLow, bLow) <= Math.min(aHigh, bHigh);
 }
 
+// Nice round tick steps (1/2/5/10 x 10^n) so the axis is legible and
+// scales cleanly with the stock's value range.
+function niceTicks(minP, maxP, count = 5) {
+  const span = maxP - minP;
+  if (span <= 0) return [minP];
+  const rawStep = span / Math.max(1, count - 1);
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const norm = rawStep / mag;
+  let step;
+  if (norm < 1.5) step = 1;
+  else if (norm < 3) step = 2;
+  else if (norm < 7) step = 5;
+  else step = 10;
+  step *= mag;
+  const niceMin = Math.floor(minP / step) * step;
+  const niceMax = Math.ceil(maxP / step) * step;
+  const ticks = [];
+  for (let p = niceMin; p <= niceMax + step * 1e-6; p += step) {
+    ticks.push(+p.toFixed(10));
+  }
+  return ticks;
+}
+
 function renderChart(data, symbol, height, sourceRowCount = data.length, gapName = opts.gap) {
   if (!data || data.length === 0) {
     console.log(`${YELL}No data to render for ${symbol}${RESET}`);
@@ -511,9 +548,11 @@ function renderChart(data, symbol, height, sourceRowCount = data.length, gapName
   const rawMin = Math.min(...data.map(d => d.low));
   const rawRange = rawMax - rawMin;
 
+  // Small headroom, then round the scale to nice tick bounds
   const pad = rawRange > 0 ? rawRange * 0.04 : (Math.abs(rawMax) * 0.02 || 1);
-  const scaleMin = rawMin - pad;
-  const scaleMax = rawMax + pad;
+  const lo = rawMin - pad, hi = rawMax + pad;
+  const ticks = niceTicks(lo, hi, 5);
+  const scaleMin = ticks[0], scaleMax = ticks[ticks.length - 1];
   const scaleRange = scaleMax - scaleMin || 1;
 
   const totalHalfRows = height * 2;
@@ -531,12 +570,13 @@ function renderChart(data, symbol, height, sourceRowCount = data.length, gapName
   const LABEL_W = 10;
   const SPINE_W = 1;
 
+  // Place nice-tick labels at the row whose band contains the tick price
   const labelRows = new Array(height).fill(' '.repeat(LABEL_W));
-  for (let i = 0; i < 5; i++) {
-    const r = Math.round((i * (height - 1)) / 4);
-    const midHalfRow = (totalHalfRows - 1) - (r * 2 + 0.5);
-    const price = scaleMin + ((midHalfRow + 0.5) / totalHalfRows) * scaleRange;
-    labelRows[r] = price.toFixed(2).padStart(LABEL_W - 1) + ' ';
+  for (const t of ticks) {
+    const row = Math.round(((scaleMax - t) / scaleRange) * (height - 1));
+    if (row >= 0 && row < height && labelRows[row].trim() === '') {
+      labelRows[row] = t.toFixed(2).padStart(LABEL_W - 1) + ' ';
+    }
   }
 
   const rows = [];
@@ -559,10 +599,10 @@ function renderChart(data, symbol, height, sourceRowCount = data.length, gapName
       let ch = ' ';
       if (topBody && botBody) {
         ch = `${col}█${RESET}`;
-      } else if (topBody && !botBody) {
-        ch = botWick ? `${col}█${RESET}` : `${col}▀${RESET}`;
-      } else if (!topBody && botBody) {
-        ch = topWick ? `${col}█${RESET}` : `${col}▄${RESET}`;
+      } else if (topBody) {
+        ch = `${col}▀${RESET}`;   // body only in top half: honest half-block, no █ overfill
+      } else if (botBody) {
+        ch = `${col}▄${RESET}`;   // body only in bottom half: honest half-block, no █ overfill
       } else if (topWick || botWick) {
         ch = `${col}│${RESET}`;
       }
@@ -675,3 +715,4 @@ async function runOne(symbol) {
   }
   if (failed > 0) process.exit(1);
 })();
+
