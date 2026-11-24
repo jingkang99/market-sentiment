@@ -97,7 +97,7 @@ if (args.length === 0 || args[0] === '-h' || args[0] === '--help') {
 }
 
 const opts = {
-  height: 50,
+  height: null,
   width: null,
   gap: '1',
   drawChart: true,
