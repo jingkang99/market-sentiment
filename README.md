@@ -39,4 +39,18 @@ npm run build
 npx pkg . --targets node18-win-x64 --out-path dist
 ```
 
-<img width="1107" height="968" alt="image" src="https://github.com/user-attachments/assets/509828c5-f35e-48d1-b5dc-a418fd80d838" />
+## Command Line Tools, zero dependency
+- Check Market Momentum
+- Draw Candlestick Chart
+
+```
+node candlestick.js v
+
+node momentums.mjs
+```
+<img width="1244" height="777" alt="image" src="https://github.com/user-attachments/assets/7d372dce-b8fd-4dc3-8672-eadffc6c247a" />
+
+<img width="617" height="1254" alt="image" src="https://github.com/user-attachments/assets/410f6831-0f35-42d9-9049-844b3c693d26" />
+
+<img width="1093" height="1363" alt="image" src="https://github.com/user-attachments/assets/3942cdd9-2610-4bdc-a26d-9a9e3539ef53" />
+
